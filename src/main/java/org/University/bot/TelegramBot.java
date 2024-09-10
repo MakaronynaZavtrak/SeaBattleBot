@@ -9,12 +9,12 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class TelegramBot extends TelegramLongPollingBot {
     private String botUserName;
-    private String token;
+    private String botToken;
 
     public TelegramBot(String botUserName, String token)
     {
         this.botUserName = botUserName;
-        this.token = token;
+        this.botToken = token;
     }
     @Override
     public void onUpdateReceived(Update update) {
@@ -24,7 +24,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         Long chatId = user.getId();
         switch (text)
         {
-            case "start":
+            case "/start":
                 sendMessage(chatId, "Привет! Я эхо-бот, который пишет " +
                     "сообщения в обратном порядке.");
                 break;
@@ -53,4 +53,5 @@ public class TelegramBot extends TelegramLongPollingBot {
     public String getBotUsername() {
         return this.botUserName;
     }
+    public String getBotToken(){return this.botToken;}
 }
