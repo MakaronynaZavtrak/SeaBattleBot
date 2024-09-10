@@ -27,8 +27,6 @@ public class Main {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        System.out.println(token);
-        System.out.println(botUserName);
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
         telegramBotsApi.registerBot(new TelegramBot(botUserName, token));
     }
