@@ -8,8 +8,8 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class TelegramBot extends TelegramLongPollingBot {
-    private String botUserName;
-    private String botToken;
+    private final String botUserName;
+    private final String botToken;
 
     public TelegramBot(String botUserName, String token)
     {
