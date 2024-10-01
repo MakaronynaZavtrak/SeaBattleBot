@@ -1,6 +1,6 @@
-package org.University;
+package org.university;
 
-import org.University.bot.TelegramBot;
+import org.university.bot.TelegramBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
