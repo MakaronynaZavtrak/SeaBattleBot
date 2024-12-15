@@ -318,8 +318,7 @@ public class TelegramBot extends TelegramLongPollingBot
         catch (TelegramApiException e)
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                            " произошла ошибка в методе sendRepeatGame(MyUser user).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                            " произошла ошибка в методе sendRepeatGame(MyUser user).\n" + e.getMessage());
         }
     }
     private InlineKeyboardMarkup getKeyboardForSendingRepeatGame()
@@ -355,7 +354,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе editMessage(MyUser user, Message message, String editedText).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -536,7 +535,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе editField(MyUser user, Integer messageId, TelegramField field).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -609,7 +608,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе sendField(MyUser user, TelegramField field, String caption).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -750,7 +749,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе deleteInvitationMessage(MyUser user, String invitingUserName).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
 
@@ -794,7 +793,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе sendPhoto(Long chatId, InputFile photo, String caption, User user).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -826,7 +825,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе sendMessage(MyUser user, String whatToSend).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     private void sendMessageWithNoSave(Long chatId, String whatToSend)
@@ -842,7 +841,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "Внимание! произошла ошибка в методе " +
                     "sendMessageWithNoSave(Long chatId, String whatToSend).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -863,7 +862,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе deleteLastMessage(MyUser user).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -885,7 +884,7 @@ public class TelegramBot extends TelegramLongPollingBot
             {
                 sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                         " произошла ошибка в методе deleteLastMessage(MyUser user, int times).\n" +
-                        Arrays.toString(e.getStackTrace()));
+                        e.getMessage());
             }
         }
     }
@@ -926,7 +925,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
                     " произошла ошибка в методе sendWaitingMessage(MyUser user).\n" +
-                    Arrays.toString(e.getStackTrace()));
+                    e.getMessage());
         }
     }
     /**
@@ -956,7 +955,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             sendMessageWithNoSave(creatorChatId, "У пользователей @" + whoIsInvited.getUserName() + "и @" +
                       whoInvites.getUserName() + " произошла ошибка в методе sendInvite(MyUser whoIsInvited," +
-                    " MyUser whoInvites).\n" + Arrays.toString(e.getStackTrace()));
+                    " MyUser whoInvites).\n" + e.getMessage());
         }
     }
     /**
