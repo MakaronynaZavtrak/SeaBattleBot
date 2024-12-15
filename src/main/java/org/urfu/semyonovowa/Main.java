@@ -1,9 +1,9 @@
-package org.university;
+package org.urfu.semyonovowa;
 
-import org.university.bot.TelegramBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
+import org.urfu.semyonovowa.bot.TelegramBotBuilder;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -28,6 +28,6 @@ public class Main {
             throw new RuntimeException(e);
         }
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-        telegramBotsApi.registerBot(new TelegramBot(botUserName, token));
+        telegramBotsApi.registerBot(new TelegramBotBuilder().setBotUserName(botUserName).setToken(token).createTelegramBot());
     }
 }

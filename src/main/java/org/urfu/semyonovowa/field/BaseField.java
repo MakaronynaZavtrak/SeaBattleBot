@@ -1,4 +1,5 @@
-package org.university.field;
+package org.urfu.semyonovowa.field;
+
 import java.util.ArrayList;
 /**
  * Является базовым представлением игрового поля независимо от используемого API
@@ -14,9 +15,7 @@ public class BaseField
         {
             ArrayList<FieldCell> newLine = new ArrayList<>();
             for (int j = 0; j < 8; j++)
-            {
-                newLine.add(new FieldCell(i, j, "\uD83C\uDF0A"));
-            }
+                newLine.add(new FieldCell(i, j, FieldEmoji.WATER_WAVE));
             fieldCellList.add(newLine);
         }
     }

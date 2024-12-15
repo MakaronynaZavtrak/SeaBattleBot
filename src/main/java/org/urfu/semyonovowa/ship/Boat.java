@@ -1,4 +1,4 @@
-package org.university.ship;
+package org.urfu.semyonovowa.ship;
 
 public class Boat extends Ship
 {

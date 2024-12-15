@@ -37,7 +37,7 @@
                             <archive>
                                 <manifest>
                                     <mainClass>
-                                        org.university.Main
+                                        org.urfu.semyonovowa.Main
                                     </mainClass>
                                 </manifest>
                             </archive>
@@ -56,7 +56,7 @@
                     <archive>
                         <manifest>
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                            <mainClass>org.university.Main</mainClass>
+                            <mainClass>org.urfu.semyonovowa.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
