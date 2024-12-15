@@ -20,7 +20,7 @@ public class MyUser {
     {
         return chatId;
     }
-    public String getUsername()
+    public String getUserName()
     {
         return userName;
     }

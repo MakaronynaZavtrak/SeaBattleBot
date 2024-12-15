@@ -3,18 +3,22 @@ package org.urfu.semyonovowa.bot;
 public class TelegramBotBuilder {
     private String botUserName;
     private String token;
-    public TelegramBotBuilder setBotUserName(String botUserName)
+    private Long creatorChatId;
+    public TelegramBotBuilder botUserName(String botUserName)
     {
         this.botUserName = botUserName;
         return this;
     }
 
-    public TelegramBotBuilder setToken(String token)
+    public TelegramBotBuilder token(String token)
     {
         this.token = token;
         return this;
     }
-    public TelegramBot createTelegramBot() {
-        return new TelegramBot(botUserName, token);
+    public TelegramBotBuilder creatorChatId(Long creatorChatId)
+    {
+        this.creatorChatId = creatorChatId;
+        return this;
     }
+    public TelegramBot build() { return new TelegramBot(botUserName, token, creatorChatId); }
 }

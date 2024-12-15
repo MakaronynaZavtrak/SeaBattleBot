@@ -34,15 +34,17 @@ public class TelegramBot extends TelegramLongPollingBot
     private final Map<String, String> userPairs;
     private final Map<Long, Stack<Message>> messageStacks;
     private final Map<Long, Map<String, Integer>> invitationMessages;
-    private final Map<String, Long> invitedUsers;
+    private final Map<String, MyUser> invitedUsers;
     private final Map<String, Game> games;
     private final String botUserName;
     private final String botToken;
-    public TelegramBot(String botUserName, String token)
+    private final Long creatorChatId;
+    public TelegramBot(String botUserName, String token, Long creatorChatId)
     {
         super(token);
         this.botUserName = botUserName;
         this.botToken = token;
+        this.creatorChatId = creatorChatId;
         this.allUsers = new HashMap<>();
         this.userPairs = new HashMap<>();
         this.messageStacks = new HashMap<>();
@@ -107,26 +109,26 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void leaveAfterGame(MyUser currentUser)
     {
-        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUsername()));
+        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
         cleanTrailsLeaveAfterGame(currentUser, "", 4);
-        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUsername(), 4);
+        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUserName(), 4);
     }
     private void leaveAfterGame(MyUser currentUser, int times)
     {
-        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUsername()));
+        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
         cleanTrailsLeaveAfterGame(currentUser, "", times);
-        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUsername(), times);
+        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUserName(), times);
     }
     private void cleanTrailsLeaveAfterGame(MyUser user, String pairUserName, int times)
     {
         user.setState(State.IN_LOBBY);
-        deleteLastMessage(user.getChatId(), times);
+        deleteLastMessage(user, times);
 
         String instructionMessage = "Ты снова оказался в лобби и " +
                 "через @ можешь пригласить играть другого пользователя";
 
         if (!pairUserName.isEmpty())
-            instructionMessage = "К сожалению, " + pairUserName + " не хочет играть.\n" + instructionMessage;
+            instructionMessage = "К сожалению, @" + pairUserName + " не хочет играть.\n" + instructionMessage;
 
         sendMessageWithNoSave(user.getChatId(), instructionMessage);
     }
@@ -141,7 +143,7 @@ public class TelegramBot extends TelegramLongPollingBot
 
         currentUser.setState(State.WANT_TO_REPLAY);
 
-        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUsername()));
+        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
         if (pairUser.getState().equals(State.WANT_TO_REPLAY))
         {
             Game newGame = new Game(pairUser, currentUser);
@@ -152,9 +154,9 @@ public class TelegramBot extends TelegramLongPollingBot
     private void prepareForReplay(MyUser user, Game game)
     {
         user.setState(State.LINCORE_SETTING);
-        games.put(user.getUsername(), game);
-        deleteLastMessage(user.getChatId(), 4);
-        sendField(user.getChatId(), game.getOwnFields().get(user.getUsername()), TIP.LINCORE);
+        games.put(user.getUserName(), game);
+        deleteLastMessage(user, 4);
+        sendField(user, game.getOwnFields().get(user.getUserName()), TIP.LINCORE);
     }
     /**
      * метод для обработки любых ходов во время игры
@@ -163,9 +165,9 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void movingHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
+        Game currentGame = games.get(currentUser.getUserName());
         String coordinates = update.getCallbackQuery().getData().substring(1);
-        String pairUsername = userPairs.get(currentUser.getUsername());
+        String pairUsername = userPairs.get(currentUser.getUserName());
         Set<String> usedCages = currentGame.getOwnFields().get(pairUsername).getUsedCages();
 
         if (usedCages.contains(coordinates))
@@ -193,23 +195,23 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void treatWinMovement(MyUser user, Game game, String information)
     {
-        deleteLastMessage(user.getChatId(), 2);
+        deleteLastMessage(user, 2);
         Stack<Message> userStack = messageStacks.get(user.getChatId());
 
         if (user.getState().equals(State.WAITING))
         {
             Message userMessagePeek = userStack.pop();
-            editField(user.getChatId(), userStack.peek().getMessageId(),
-                    game.getOwnFields().get(user.getUsername()));
+            editField(user, userStack.peek().getMessageId(),
+                    game.getOwnFields().get(user.getUserName()));
             userStack.add(userMessagePeek);
         }
-        else editField(user.getChatId(), userStack.peek().getMessageId(),
-                game.getEnemyFields().get(user.getUsername()));
+        else editField(user, userStack.peek().getMessageId(),
+                game.getEnemyFields().get(user.getUserName()));
 
         user.setState(State.FINISHED_GAME);
-        sendMessage(user.getChatId(), information);
-        games.remove(user.getUsername());
-        sendRepeatGame(user.getChatId());
+        sendMessage(user, information);
+        games.remove(user.getUserName());
+        sendRepeatGame(user);
     }
     /**
      * метод для обработки ситуации, когда при очередном шаге победитель не выявился
@@ -223,13 +225,13 @@ public class TelegramBot extends TelegramLongPollingBot
         Message lastMessage = userStack.peek();
         String userState = user.getState();
 
-        Boolean flag = game.getFirstMovement().get(user.getUsername());
+        Boolean flag = game.getFirstMovement().get(user.getUserName());
         if (flag != null)
             treatNotFirstMovement(user, information, lastMessage);
         else
         {
             treatFirstMovement(user, information, lastMessage);
-            game.getFirstMovement().put(user.getUsername(), true);
+            game.getFirstMovement().put(user.getUserName(), true);
         }
 
         Message turn = userStack.pop();
@@ -238,11 +240,11 @@ public class TelegramBot extends TelegramLongPollingBot
         if (userState.equals(State.WAITING))
         {
             Message userMessagePeek = userStack.pop();
-            editField(user.getChatId(), userStack.peek().getMessageId(), game.getOwnFields().get(user.getUsername()));
+            editField(user, userStack.peek().getMessageId(), game.getOwnFields().get(user.getUserName()));
             userStack.add(userMessagePeek);
         }
         else
-            editField(user.getChatId(), userStack.peek().getMessageId(), game.getEnemyFields().get(user.getUsername()));
+            editField(user, userStack.peek().getMessageId(), game.getEnemyFields().get(user.getUserName()));
 
         userStack.add(event);
         userStack.add(turn);
@@ -255,7 +257,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void treatFirstMovement(MyUser user, String information, Message lastMessage)
     {
-        editMessage(user.getChatId(), lastMessage, information);
+        editMessage(user, lastMessage, information);
         lastMessage.setText(information);
         String turn;
         switch (information)
@@ -265,7 +267,7 @@ public class TelegramBot extends TelegramLongPollingBot
             case MovingInformation.CURRENT_USER_HURT, MovingInformation.CURRENT_USER_KILL -> turn = "Сейчас ходишь ты";
             default -> turn = "Сейчас ходит противник";
         }
-        sendMessage(user.getChatId(), turn);
+        sendMessage(user, turn);
     }
     /**
      * обработка всех остальных непервых ходов в игре
@@ -281,41 +283,43 @@ public class TelegramBot extends TelegramLongPollingBot
 
         if (!infoMsg.getText().equals(userInformation))
         {
-            editMessage(user.getChatId(), infoMsg, userInformation);
+            editMessage(user, infoMsg, userInformation);
             infoMsg.setText(userInformation);
         }
         if (userInformation.equals(MovingInformation.CURRENT_USER_MISS))
         {
             user.setState(State.WAITING);
-            editMessage(user.getChatId(), lastMessage, "Сейчас ходит противник");
+            editMessage(user, lastMessage, "Сейчас ходит противник");
             lastMessage.setText("Сейчас ходит противник");
 
         }
         else if (userInformation.equals(MovingInformation.PAIR_USER_MISS))
         {
             user.setState(State.MOVING);
-            editMessage(user.getChatId(), lastMessage, "Сейчас ходишь ты");
+            editMessage(user, lastMessage, "Сейчас ходишь ты");
             lastMessage.setText("Сейчас ходишь ты");
         }
         userMessageStack.add(lastMessage);
     }
     /**
      * метод для отправки сообщения на повторную игру
-     * @param chatId - куда отправить
+     * @param user - кому отправить
      */
-    public void sendRepeatGame(Long chatId)
+    public void sendRepeatGame(MyUser user)
     {
         SendMessage message = SendMessage.builder()
-                .chatId(chatId)
+                .chatId(user.getChatId())
                 .text("Хочешь сыграть с этим игроком еще раз?")
                 .replyMarkup(getKeyboardForSendingRepeatGame()).build();
         try
         {
-            messageStacks.get(chatId).add(execute(message));
+            messageStacks.get(user.getChatId()).add(execute(message));
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                            " произошла ошибка в методе sendRepeatGame(MyUser user).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     private InlineKeyboardMarkup getKeyboardForSendingRepeatGame()
@@ -333,14 +337,14 @@ public class TelegramBot extends TelegramLongPollingBot
     }
     /**
      * метод для редактирования сообщений
-     * @param chatId - где отредактировать
+     * @param user - в диалоге с кем отредактировать
      * @param message - какое сообщение отредактировать
      * @param editedText - на что отредактировать
      */
-    public void editMessage(Long chatId, Message message, String editedText)
+    public void editMessage(MyUser user, Message message, String editedText)
     {
         EditMessageText editedMessage = EditMessageText.builder()
-                .chatId(chatId)
+                .chatId(user.getChatId())
                 .messageId(message.getMessageId())
                 .text(editedText).build();
         try
@@ -349,7 +353,9 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            throw new RuntimeException(e);
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе editMessage(MyUser user, Message message, String editedText).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
@@ -359,21 +365,21 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat3SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
+        Game currentGame = games.get(currentUser.getUserName());
         final int LAST_SHIP = 6;
-        Ship boat3 = currentGame.getShips().get(currentUser.getUsername()).get(LAST_SHIP);
+        Ship boat3 = currentGame.getShips().get(currentUser.getUserName()).get(LAST_SHIP);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat3))
         {
             if (boat3.getCoordinatesSet().size() == boat3.getLives())
             {
                 currentUser.setState(State.READY_TO_PLAY);
-                MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUsername()));
+                MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
                 if (!pairUser.getState().equals(State.READY_TO_PLAY))
                 {
-                    editMessage(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek(),
+                    editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(),
                             "Подожди, твой противник еще расставляет корабли");
-                    editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                            currentGame.getOwnFields().get(currentUser.getUsername()));
+                    editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                            currentGame.getOwnFields().get(currentUser.getUserName()));
                 }
                 else
                 {
@@ -385,18 +391,18 @@ public class TelegramBot extends TelegramLongPollingBot
     }
     private void sendFieldsAndDefineTurn(MyUser user, Game game)
     {
-        deleteLastMessage(user.getChatId());
-        sendField(user.getChatId(), game.getOwnFields().get(user.getUsername()), "Твое поле:");
-        sendField(user.getChatId(), game.getEnemyFields().get(user.getUsername()), "Поле твоего противника:");
-        if (user.getUsername().equals((game.getCreator().getUsername())))
+        deleteLastMessage(user);
+        sendField(user, game.getOwnFields().get(user.getUserName()), "Твое поле:");
+        sendField(user, game.getEnemyFields().get(user.getUserName()), "Поле твоего противника:");
+        if (user.getUserName().equals((game.getCreator().getUserName())))
         {
             user.setState(State.MOVING);
-            sendMessage(user.getChatId(), "Cейчас ходишь ты");
+            sendMessage(user, "Cейчас ходишь ты");
         }
         else
         {
             user.setState(State.WAITING);
-            sendMessage(user.getChatId(), "Cейчас ходит противник");
+            sendMessage(user, "Cейчас ходит противник");
         }
     }
     /**
@@ -406,14 +412,14 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat2SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship boat2 = currentGame.getShips().get(currentUser.getUsername()).get(5);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship boat2 = currentGame.getShips().get(currentUser.getUserName()).get(5);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat2))
         {
             if (boat2.getCoordinatesSet().size() == boat2.getLives())
                 currentUser.setState(State.BOAT_3_SETTING);
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
@@ -423,14 +429,14 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat1SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship boat1 = currentGame.getShips().get(currentUser.getUsername()).get(4);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship boat1 = currentGame.getShips().get(currentUser.getUserName()).get(4);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat1))
         {
             if (boat1.getCoordinatesSet().size() == boat1.getLives())
                 currentUser.setState(State.BOAT_2_SETTING);
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
@@ -440,17 +446,17 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void esminez2SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship esminez2 = currentGame.getShips().get(currentUser.getUsername()).get(3);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship esminez2 = currentGame.getShips().get(currentUser.getUserName()).get(3);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez2))
         {
             if (esminez2.getCoordinatesSet().size() == esminez2.getLives())
             {
                 currentUser.setState(State.BOAT_1_SETTING);
-                editMessage(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek(), TIP.BOATS);
+                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.BOATS);
             }
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
@@ -460,14 +466,14 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void esminez1SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship esminez1 = currentGame.getShips().get(currentUser.getUsername()).get(2);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship esminez1 = currentGame.getShips().get(currentUser.getUserName()).get(2);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez1))
         {
             if (esminez1.getCoordinatesSet().size() == esminez1.getLives())
                 currentUser.setState(State.ESMINEZ_2_SETTTING);
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
@@ -477,17 +483,17 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void cruiserSettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship cruiser = currentGame.getShips().get(currentUser.getUsername()).get(1);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship cruiser = currentGame.getShips().get(currentUser.getUserName()).get(1);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, cruiser))
         {
             if (cruiser.getCoordinatesSet().size() == cruiser.getLives())
             {
                 currentUser.setState(State.ESMINEZ_1_SETTTING);
-                editMessage(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
+                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
             }
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
@@ -497,29 +503,29 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void linCoreSettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getUsername());
-        Ship linCore = currentGame.getShips().get(currentUser.getUsername()).get(0);
+        Game currentGame = games.get(currentUser.getUserName());
+        Ship linCore = currentGame.getShips().get(currentUser.getUserName()).get(0);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, linCore))
         {
             if (linCore.getCoordinatesSet().size() == linCore.getLives())
             {
                 currentUser.setState(State.CRUISER_SETTING);
-                editMessage(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek(), TIP.CRUISER);
+                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.CRUISER);
             }
-            editField(currentUser.getChatId(), messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getUsername()));
+            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    currentGame.getOwnFields().get(currentUser.getUserName()));
         }
     }
     /**
      * метод для редактирования поля
-     * @param chatId - в каком диалоге редактировать
+     * @param user - кому отправить
      * @param messageId - в каком сообщении
      * @param field - на какое поле заменить исходное
      */
-    public void editField(Long chatId, Integer messageId, TelegramField field)
+    public void editField(MyUser user, Integer messageId, TelegramField field)
     {
         EditMessageReplyMarkup editedField = EditMessageReplyMarkup.builder()
-                        .chatId(chatId)
+                        .chatId(user.getChatId())
                         .messageId(messageId)
                         .replyMarkup(field.getKeyboardMarkup()).build();
         try
@@ -528,7 +534,9 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе editField(MyUser user, Integer messageId, TelegramField field).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
@@ -557,40 +565,40 @@ public class TelegramBot extends TelegramLongPollingBot
     private void treatAcceptInvite(MyUser whoAccepts, MyUser whoInvites)
     {
         Game newGame = new Game(whoInvites, whoAccepts);
-        deleteLastMessage(whoInvites.getChatId());
-        deleteInvitationMessage(whoAccepts.getChatId(), whoInvites.getUsername());
+        deleteLastMessage(whoInvites);
+        deleteInvitationMessage(whoAccepts, whoInvites.getUserName());
         prepareForShipSetting(whoInvites, whoAccepts, newGame);
         prepareForShipSetting(whoAccepts, whoInvites, newGame);
     }
     private void prepareForShipSetting(MyUser user1, MyUser user2, Game game)
     {
         user1.setState(State.LINCORE_SETTING);
-        games.put(user1.getUsername(), game);
-        userPairs.put(user1.getUsername(), user2.getUsername());
-        sendField(user1.getChatId(), game.getOwnFields().get(user1.getUsername()), TIP.LINCORE);
+        games.put(user1.getUserName(), game);
+        userPairs.put(user1.getUserName(), user2.getUserName());
+        sendField(user1, game.getOwnFields().get(user1.getUserName()), TIP.LINCORE);
     }
     /**
      * метод для отправки игрового поля
-     * @param chatId куда отправить
-     * @param field какое поле отправить
-     * @param caption надпись над полем
+     * @param user - кому отправить
+     * @param field - какое поле отправить
+     * @param caption - надпись над полем
      */
-    public void sendField(Long chatId, TelegramField field, String caption)
+    public void sendField(MyUser user, TelegramField field, String caption)
     {
         InlineKeyboardMarkup keyboardMarkup = field.getKeyboardMarkup();
         SendMessage message = SendMessage.builder()
-                .chatId(chatId)
+                .chatId(user.getChatId())
                 .text(caption)
                 .replyMarkup(keyboardMarkup).build();
         try
         {
             Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(chatId);
+            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
             if (currentMessageStack == null)
             {
                 Stack<Message> newStack = new Stack<>();
                 newStack.add(sendedMessage);
-                messageStacks.put(chatId, newStack);
+                messageStacks.put(user.getChatId(), newStack);
             }
             else
             {
@@ -599,7 +607,9 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendField(MyUser user, TelegramField field, String caption).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
@@ -609,10 +619,10 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void treatRefuseInvite(MyUser whoRefuses, MyUser whoInvites)
     {
-        deleteLastMessage(whoInvites.getChatId());
+        deleteLastMessage(whoInvites);
         sendMessageWithNoSave(whoInvites.getChatId(),
                 whoRefuses.getFirstName() + " отклонил твое приглашение.");
-        deleteInvitationMessage(whoRefuses.getChatId(), whoInvites.getUsername());
+        deleteInvitationMessage(whoRefuses, whoInvites.getUserName());
     }
     /**
      * метод для обработки всех тектовых сообщений, вводимых пользователем
@@ -651,7 +661,7 @@ public class TelegramBot extends TelegramLongPollingBot
         int deleteMessageCounter;
         if (currentUser.getState().contains("setting") || currentUser.getState().equals(State.READY_TO_PLAY))
             deleteMessageCounter = 1;
-        else if (games.get(currentUser.getUsername()).getFirstMovement().get(currentUser.getUsername()) == null)
+        else if (games.get(currentUser.getUserName()).getFirstMovement().get(currentUser.getUserName()) == null)
             deleteMessageCounter = 3;
         else
             deleteMessageCounter = 4;
@@ -659,11 +669,11 @@ public class TelegramBot extends TelegramLongPollingBot
     }
     private void permuteField(MyUser currentUser)
     {
-        deleteLastMessage(currentUser.getChatId());
-        Game currentGame = games.get(currentUser.getUsername());
+        deleteLastMessage(currentUser);
+        Game currentGame = games.get(currentUser.getUserName());
         currentGame.resetOwnField(currentUser);
         currentUser.setState(State.LINCORE_SETTING);
-        sendField(currentUser.getChatId(), currentGame.getOwnFields().get(currentUser.getUsername()), TIP.LINCORE);
+        sendField(currentUser, currentGame.getOwnFields().get(currentUser.getUserName()), TIP.LINCORE);
     }
     private void endGameMessageHandler(MyUser currentUser, Update update)
     {
@@ -703,8 +713,8 @@ public class TelegramBot extends TelegramLongPollingBot
             }
             else if (invitedUser.getState().equals(State.IN_LOBBY))
             {
-                sendInvite(invitedUser.getChatId(), currentUser);
-                sendWaitingMessage(currentUser.getChatId());
+                sendInvite(invitedUser, currentUser);
+                sendWaitingMessage(currentUser);
             }
             else if (!currentUser.getState().equals(State.IN_LOBBY))
             {
@@ -719,57 +729,58 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void cancelInvitation(MyUser invitingUser)
     {
-        deleteLastMessage(invitingUser.getChatId());
-        String invitingUserName = invitingUser.getUsername();
-
-        Long chatId = invitedUsers.get(invitingUserName);
-        deleteInvitationMessage(chatId, invitingUserName);
+        deleteLastMessage(invitingUser);
+        String invitingUserName = invitingUser.getUserName();
+        deleteInvitationMessage(invitedUsers.get(invitingUserName), invitingUserName);
     }
 
-    private void deleteInvitationMessage(Long chatId, String invitingUserName)
+    private void deleteInvitationMessage(MyUser user, String invitingUserName)
     {
-        Integer messageId = invitationMessages.get(chatId).get(invitingUserName);
+        Integer messageId = invitationMessages.get(user.getChatId()).get(invitingUserName);
         invitedUsers.remove(invitingUserName);
 
         DeleteMessage message = DeleteMessage.builder()
                 .messageId(messageId)
-                .chatId(chatId).build();
+                .chatId(user.getChatId()).build();
         try
         {
             execute(message);
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе deleteInvitationMessage(MyUser user, String invitingUserName).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
 
-    private void registerUserAndGreet(Long userChatId, User user)
+    private void registerUserAndGreet(Long chatId, User user)
     {
             allUsers.put(user.getUserName(),
-                    new MyUser(userChatId, user.getUserName(), user.getFirstName(), State.IN_LOBBY));
-            sendGreetings(userChatId, user.getFirstName());
+                    new MyUser(chatId, user.getUserName(), user.getFirstName(), State.IN_LOBBY));
+            sendGreetings(chatId, user);
     }
     /**
      * Метод, высылающий пользователю сообщение-приветствие
      * @param chatId - куда отправить
-     * @param userFirstName - имя для обращения к пользователю
+     * @param user - кому отправить
      */
-    public void sendGreetings(Long chatId, String userFirstName)
+    public void sendGreetings(Long chatId, User user)
     {
         InputFile picture = new InputFile("https://www.blast.hk/data/avatars/o/345/345147.jpg?1636698629");
-        sendPhoto(chatId, picture, "Привет, " + userFirstName + "! Добро пожаловать в морской ♂boy♂\n"+
+        sendPhoto(chatId, picture, "Привет, " + user.getFirstName() + "! Добро пожаловать в морской ♂boy♂\n"+
                 "Сейчас ты находишься в лобби ожидания. Для того, чтобы начать игру, введи " +
                 "мне @userName своего друга (обязательно с @), с которым хочешь сыграть, либо же дождись," +
-                " когда это сделает он.");
+                " когда это сделает он.", user);
     }
     /**
      * метод для отправки приветственной открытки
      * @param chatId - куда отправить
      * @param photo - открытка
      * @param caption - надпись для открытки
+     * @param user - кому отправить
      */
-    public void sendPhoto(Long chatId, InputFile photo, String caption)
+    public void sendPhoto(Long chatId, InputFile photo, String caption, User user)
     {
         SendPhoto message = SendPhoto.builder()
                 .photo(photo)
@@ -781,28 +792,30 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendPhoto(Long chatId, InputFile photo, String caption, User user).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
      * метод отправки сообщений
-     * @param chatId - куда отправить
+     * @param user - кому отправить
      * @param whatToSend - что отправить
      */
-    private void sendMessage(Long chatId, String whatToSend)
+    private void sendMessage(MyUser user, String whatToSend)
     {
         SendMessage message = SendMessage.builder()
-                .chatId(chatId)
+                .chatId(user.getChatId())
                 .text(whatToSend).build();
         try
         {
             Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(chatId);
+            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
             if (currentMessageStack == null)
             {
                 Stack<Message> newStack = new Stack<>();
                 newStack.add(sendedMessage);
-                messageStacks.put(chatId, newStack);
+                messageStacks.put(user.getChatId(), newStack);
             }
             else
             {
@@ -811,7 +824,9 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendMessage(MyUser user, String whatToSend).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     private void sendMessageWithNoSave(Long chatId, String whatToSend)
@@ -825,18 +840,20 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "Внимание! произошла ошибка в методе " +
+                    "sendMessageWithNoSave(Long chatId, String whatToSend).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
      * по заданному chatId удаляет последнее сообщение бота в диалоге
-     * @param chatId - в каком диалоге удалить
+     * @param user - в диалоге с кем удалить
      */
-    private void deleteLastMessage(Long chatId)
+    private void deleteLastMessage(MyUser user)
     {
-        Stack<Message> currentMessageStack = messageStacks.get(chatId);
+        Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
         DeleteMessage deleteMessage = DeleteMessage.builder()
-                        .chatId(chatId)
+                        .chatId(user.getChatId())
                         .messageId(currentMessageStack.pop().getMessageId()).build();
         try
         {
@@ -844,27 +861,31 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе deleteLastMessage(MyUser user).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
      * по заданному chatId удаляет последнее сообщение бота в диалоге
-     * @param chatId - в каком диалоге удалить
+     * @param user - в диалоге с кем удалить
      */
-    private void deleteLastMessage(Long chatId, int times)
+    private void deleteLastMessage(MyUser user, int times)
     {
-        Stack<Message> currentMessageStack = messageStacks.get(chatId);
+        Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
         for (int i = 0; i < times; i++)
         {
             DeleteMessage deleteMessage = DeleteMessage.builder()
-                    .chatId(chatId)
+                    .chatId(user.getChatId())
                     .messageId(currentMessageStack.pop().getMessageId()).build();
             try
             {
                 execute(deleteMessage);
             } catch (TelegramApiException e)
             {
-                e.printStackTrace();
+                sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                        " произошла ошибка в методе deleteLastMessage(MyUser user, int times).\n" +
+                        Arrays.toString(e.getStackTrace()));
             }
         }
     }
@@ -872,9 +893,9 @@ public class TelegramBot extends TelegramLongPollingBot
      * Присылает сообщение для приглашающего и ожидающего пользователя,
      * предоставляющее ему возможность отменить приглашение
      *
-     * @param chatId куда отправить
+     * @param user кому отправить
      */
-    private void sendWaitingMessage(Long chatId)
+    private void sendWaitingMessage(MyUser user)
     {
         KeyboardRow row1 = new KeyboardRow(List.of(new KeyboardButton("Отменить приглашение❌")));
         ReplyKeyboardMarkup keyboardMarkup = ReplyKeyboardMarkup.builder()
@@ -883,18 +904,18 @@ public class TelegramBot extends TelegramLongPollingBot
                 .keyboard(Collections.singletonList(row1)).build();
 
         SendMessage message = SendMessage.builder()
-                .chatId(chatId)
+                .chatId(user.getChatId())
                 .text("Приглашение отправлено. Ожидай ответа!")
                 .replyMarkup(keyboardMarkup).build();
         try
         {
             Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(chatId);
+            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
             if (currentMessageStack == null)
             {
                 Stack<Message> newStack = new Stack<>();
                 newStack.add(sendedMessage);
-                messageStacks.put(chatId, newStack);
+                messageStacks.put(user.getChatId(), newStack);
             }
             else
             {
@@ -903,35 +924,39 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendWaitingMessage(MyUser user).\n" +
+                    Arrays.toString(e.getStackTrace()));
         }
     }
     /**
      * метод для отправки приглашения на поединок
-     * @param chatId - куда отправить
-     * @param whoInvites - имя приглашающего пользователя
+     * @param whoIsInvited - приглашаемый пользователь
+     * @param whoInvites - приглашающий пользователь
      */
-    private void sendInvite(Long chatId, MyUser whoInvites)
+    private void sendInvite(MyUser whoIsInvited, MyUser whoInvites)
     {
         SendMessage message = SendMessage.builder()
-                        .chatId(chatId)
+                        .chatId(whoIsInvited.getChatId())
                         .text(whoInvites.getFirstName() + " приглашает тебя поиграть в морской бой!")
                         .replyMarkup(getInviteKeyboard(whoInvites)).build();
         try
         {
-            invitedUsers.put(whoInvites.getUsername(), chatId);
+            invitedUsers.put(whoInvites.getUserName(), whoIsInvited);
             Message sendedMessage = execute(message);
-            Map<String, Integer> invitationTable = invitationMessages.get(chatId);
+            Map<String, Integer> invitationTable = invitationMessages.get(whoIsInvited.getChatId());
             if (invitationTable == null)
             {
-                invitationMessages.put(chatId, new HashMap<>());
-                invitationTable = invitationMessages.get(chatId);
+                invitationMessages.put(whoIsInvited.getChatId(), new HashMap<>());
+                invitationTable = invitationMessages.get(whoIsInvited.getChatId());
             }
-            invitationTable.put(whoInvites.getUsername(), sendedMessage.getMessageId());
+            invitationTable.put(whoInvites.getUserName(), sendedMessage.getMessageId());
         }
         catch (TelegramApiException e)
         {
-            e.printStackTrace();
+            sendMessageWithNoSave(creatorChatId, "У пользователей @" + whoIsInvited.getUserName() + "и @" +
+                      whoInvites.getUserName() + " произошла ошибка в методе sendInvite(MyUser whoIsInvited," +
+                    " MyUser whoInvites).\n" + Arrays.toString(e.getStackTrace()));
         }
     }
     /**
@@ -941,10 +966,10 @@ public class TelegramBot extends TelegramLongPollingBot
     private InlineKeyboardMarkup getInviteKeyboard(MyUser user) {
         InlineKeyboardButton acceptButton = InlineKeyboardButton.builder()
                 .text("Принять приглашение✅")
-                .callbackData("accept_Invite" + user.getUsername()).build();
+                .callbackData("accept_Invite" + user.getUserName()).build();
         InlineKeyboardButton refuseButton = InlineKeyboardButton.builder()
                 .text("Отклонить❌")
-                .callbackData("refuse_Invite" + user.getUsername()).build();
+                .callbackData("refuse_Invite" + user.getUserName()).build();
         List<InlineKeyboardButton> row1 = Collections.singletonList(acceptButton);
         List<InlineKeyboardButton> row2 = Collections.singletonList(refuseButton);
         return InlineKeyboardMarkup.builder()

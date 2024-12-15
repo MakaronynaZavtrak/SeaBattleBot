@@ -10,24 +10,35 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Properties;
 
-public class Main {
-    public static Properties getBotProperties(File propertyFile) throws IOException {
+public class Main
+{
+    public static Properties getBotProperties(File propertyFile) throws IOException
+    {
         Properties properties = new Properties();
         FileInputStream input = new FileInputStream(propertyFile);
         properties.load(input);
         return properties;
     }
-    public static void main(String[] args) throws TelegramApiException {
+    public static void main(String[] args) throws TelegramApiException
+    {
         String token;
         String botUserName;
-                try {
+        long creatorChatId;
+        try
+        {
             Properties properties = getBotProperties(new File(args[0]));
             token = properties.getProperty("bot.token");
             botUserName = properties.getProperty("bot.name");
-        } catch (IOException e) {
+            creatorChatId = Long.parseLong(properties.getProperty("bot.creatorChatId"));
+        }
+        catch (IOException e)
+        {
             throw new RuntimeException(e);
         }
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-        telegramBotsApi.registerBot(new TelegramBotBuilder().setBotUserName(botUserName).setToken(token).createTelegramBot());
+        telegramBotsApi.registerBot(new TelegramBotBuilder()
+                .botUserName(botUserName)
+                .token(token)
+                .creatorChatId(creatorChatId).build());
     }
 }
