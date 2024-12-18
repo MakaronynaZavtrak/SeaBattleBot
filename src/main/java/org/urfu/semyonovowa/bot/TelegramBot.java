@@ -16,6 +16,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 import org.urfu.semyonovowa.game.MovingInformation;
 import org.urfu.semyonovowa.game.MovingInformationForBothPlayers;
 import org.urfu.semyonovowa.field.TelegramField;
@@ -24,6 +25,7 @@ import org.urfu.semyonovowa.ship.Ship;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.State;
 
+import java.sql.SQLException;
 import java.util.*;
 /**
  * Класс, в котором изложена логика обработки взаимодействия с пользователями телеграмма
@@ -39,7 +41,8 @@ public class TelegramBot extends TelegramLongPollingBot
     private final String botUserName;
     private final String botToken;
     private final Long creatorChatId;
-    public TelegramBot(String botUserName, String token, Long creatorChatId)
+    private final DataBaseHandler dataBaseHandler;
+    public TelegramBot(String botUserName, String token, Long creatorChatId, DataBaseHandler dataBaseHandler)
     {
         super(token);
         this.botUserName = botUserName;
@@ -51,6 +54,7 @@ public class TelegramBot extends TelegramLongPollingBot
         this.invitationMessages = new HashMap<>();
         this.invitedUsers = new HashMap<>();
         this.games = new HashMap<>();
+        this.dataBaseHandler = dataBaseHandler;
     }
     /**
      * Основной метод, разделяющий входные сообщения на текст и кнопки (callBackQuery)
@@ -61,7 +65,14 @@ public class TelegramBot extends TelegramLongPollingBot
     {
         if (update.hasMessage() && update.getMessage().hasText())
         {
-            handleMessage(update);
+            try
+            {
+                handleMessage(update);
+            }
+            catch (SQLException | ClassNotFoundException e)
+            {
+                throw new RuntimeException(e);
+            }
         }
         else if (update.hasCallbackQuery())
         {
@@ -627,7 +638,7 @@ public class TelegramBot extends TelegramLongPollingBot
      * метод для обработки всех тектовых сообщений, вводимых пользователем
      * @param update - входящие изменения
      */
-    private void handleMessage(Update update)
+    private void handleMessage(Update update) throws SQLException, ClassNotFoundException
     {
         User currentUser =  update.getMessage().getFrom();
         MyUser currentMyUser = allUsers.get(currentUser.getUserName());
@@ -710,7 +721,8 @@ public class TelegramBot extends TelegramLongPollingBot
                 sendMessageWithNoSave(currentUser.getChatId(),
                         "Извини, данного пользователя нет в системе.");
             }
-            else if (invitedUser.getState().equals(State.IN_LOBBY))
+            else if (invitedUser.getState().equals(State.IN_LOBBY) &&
+                    !invitedUser.getUserName().equals(currentUser.getUserName()))
             {
                 sendInvite(invitedUser, currentUser);
                 sendWaitingMessage(currentUser);
@@ -720,6 +732,8 @@ public class TelegramBot extends TelegramLongPollingBot
                 sendMessageWithNoSave(currentUser.getChatId(),
                         "Извини, данный пользователь уже с кем-то играет");
             }
+            else if (invitedUser.getUserName().equals(currentUser.getUserName()))
+                sendMessageWithNoSave(currentUser.getChatId(), "Опции игры с самим собой пока-что нет :(");
         }
     }
     /**
@@ -753,11 +767,12 @@ public class TelegramBot extends TelegramLongPollingBot
         }
     }
 
-    private void registerUserAndGreet(Long chatId, User user)
+    private void registerUserAndGreet(Long chatId, User user) throws SQLException, ClassNotFoundException
     {
-            allUsers.put(user.getUserName(),
-                    new MyUser(chatId, user.getUserName(), user.getFirstName(), State.IN_LOBBY));
-            sendGreetings(chatId, user);
+        MyUser newUser = new MyUser(chatId, user.getUserName(), user.getFirstName(), State.IN_LOBBY);
+        allUsers.put(user.getUserName(), newUser);
+        dataBaseHandler.insertUserIntoDB(newUser);
+        sendGreetings(chatId, user);
     }
     /**
      * Метод, высылающий пользователю сообщение-приветствие
@@ -974,6 +989,7 @@ public class TelegramBot extends TelegramLongPollingBot
         return InlineKeyboardMarkup.builder()
                 .keyboard(Arrays.asList(row1, row2)).build();
     }
+    public static TelegramBotBuilder builder() { return new TelegramBotBuilder(); }
     /**
      * геттер для имени бота
      * @return имя бота
