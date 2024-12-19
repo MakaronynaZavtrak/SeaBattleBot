@@ -17,14 +17,18 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
+import org.urfu.semyonovowa.dataBase.Query;
 import org.urfu.semyonovowa.game.MovingInformation;
 import org.urfu.semyonovowa.game.MovingInformationForBothPlayers;
 import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.game.Game;
 import org.urfu.semyonovowa.ship.Ship;
 import org.urfu.semyonovowa.user.MyUser;
+import org.urfu.semyonovowa.user.Rank;
+import org.urfu.semyonovowa.user.RankList;
 import org.urfu.semyonovowa.user.State;
 
+import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.*;
 /**
@@ -76,15 +80,21 @@ public class TelegramBot extends TelegramLongPollingBot
         }
         else if (update.hasCallbackQuery())
         {
-            handleCallbackQuery(update);
+            try
+            {
+                handleCallbackQuery(update);
+            }
+            catch (SQLException | ClassNotFoundException e)
+            {
+                throw new RuntimeException(e);
+            }
         }
     }
     /**
      * метод для обработки всех нажатий на кнопки
      * @param update - входящие изменения
      */
-    private void handleCallbackQuery(Update update)
-    {
+    private void handleCallbackQuery(Update update) throws SQLException, ClassNotFoundException {
         MyUser currentUser = allUsers.get(update.getCallbackQuery().getFrom().getUserName());
         switch (currentUser.getState())
         {
@@ -114,35 +124,37 @@ public class TelegramBot extends TelegramLongPollingBot
             case "want_to_exit" -> leaveAfterGame(currentUser);
         }
     }
+
+    private void leaveFromCurrentGame(MyUser currentUser, int times)
+    {
+        commonLeaveGame(currentUser, times, "@", " сбежал с поля битвы!");
+    }
+
+    private void commonLeaveGame(MyUser currentUser, int times, String textBefore, String textAfter)
+    {
+        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
+        commonCleanTrailsEndGame(currentUser, times, "");
+        commonCleanTrailsEndGame(pairUser, times, textBefore + currentUser.getUserName() + textAfter);
+    }
+    private void commonCleanTrailsEndGame(MyUser user, int times, String message)
+    {
+        user.setState(State.IN_LOBBY);
+        deleteLastMessage(user, times);
+
+        if (!message.isEmpty())
+            sendMessageWithNoSave(user.getChatId(), message);
+        sendMainLobbyMenu(user);
+    }
+
     /**
      * метод для обработки разрыва сеанса между двумя игроками после игры
      * @param currentUser - текущий пользователь 
      */
     private void leaveAfterGame(MyUser currentUser)
     {
-        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
-        cleanTrailsLeaveAfterGame(currentUser, "", 4);
-        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUserName(), 4);
+        commonLeaveGame(currentUser, 4, "К сожалению, @", " больше не хочет играть.");
     }
-    private void leaveAfterGame(MyUser currentUser, int times)
-    {
-        MyUser pairUser = allUsers.get(userPairs.get(currentUser.getUserName()));
-        cleanTrailsLeaveAfterGame(currentUser, "", times);
-        cleanTrailsLeaveAfterGame(pairUser, currentUser.getUserName(), times);
-    }
-    private void cleanTrailsLeaveAfterGame(MyUser user, String pairUserName, int times)
-    {
-        user.setState(State.IN_LOBBY);
-        deleteLastMessage(user, times);
 
-        String instructionMessage = "Ты снова оказался в лобби и " +
-                "через @ можешь пригласить играть другого пользователя";
-
-        if (!pairUserName.isEmpty())
-            instructionMessage = "К сожалению, @" + pairUserName + " не хочет играть.\n" + instructionMessage;
-
-        sendMessageWithNoSave(user.getChatId(), instructionMessage);
-    }
     /**
      * метод для обработки начала новой игры с сохранием исходной пары игроков
      * @param currentUser - текущий пользователь
@@ -174,8 +186,7 @@ public class TelegramBot extends TelegramLongPollingBot
      * @param currentUser - текущий пользователь
      * @param update - изменения
      */
-    private void movingHandler(MyUser currentUser, Update update)
-    {
+    private void movingHandler(MyUser currentUser, Update update) throws ClassNotFoundException {
         Game currentGame = games.get(currentUser.getUserName());
         String coordinates = update.getCallbackQuery().getData().substring(1);
         String pairUsername = userPairs.get(currentUser.getUserName());
@@ -196,6 +207,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             treatWinMovement(currentUser, currentGame, information.currentUserInformation);
             treatWinMovement(pairUser, currentGame, information.pairUserInformation);
+            dataBaseHandler.executeAddedQueries();
         }
     }
     /**
@@ -211,15 +223,35 @@ public class TelegramBot extends TelegramLongPollingBot
 
         if (user.getState().equals(State.WAITING))
         {
+            user.increaseExperience(5);
+            user.incrementLoses();
+            dataBaseHandler.addBatch(Query.UPDATE_LOSES_SQL, user.getChatId(), user.getLoses());
             Message userMessagePeek = userStack.pop();
             editField(user, userStack.peek().getMessageId(),
                     game.getOwnFields().get(user.getUserName()));
             userStack.add(userMessagePeek);
         }
-        else editField(user, userStack.peek().getMessageId(),
-                game.getEnemyFields().get(user.getUserName()));
+        else
+        {
+            user.increaseExperience(10);
+            user.incrementWins();
+            dataBaseHandler.addBatch(Query.UPDATE_WINS_SQL, user.getChatId(), user.getWins());
+            editField(user, userStack.peek().getMessageId(),
+                    game.getEnemyFields().get(user.getUserName()));
+        }
 
         user.setState(State.FINISHED_GAME);
+        dataBaseHandler.addBatch(Query.UPDATE_EXPERIENCE_SQL, user.getChatId(), user.getExperience());
+
+        if (user.getExperience() >= RankList.ranks.get(user.getCurrentRankIdx()).experience)
+        {
+            user.incrementCurrentRankIdx();
+            dataBaseHandler.addBatch(Query.UPDATE_RANK_INDEX_SQL, user.getChatId(), user.getCurrentRankIdx());
+            String[] splittedRank = RankList.ranks.get(user.getCurrentRankIdx()).rank.split(" ");
+            information += "\nПоздравляю! Твое звание повышено до " + splittedRank[0] + "a";
+            information += (splittedRank.length > 1) ? " " + splittedRank[1] + "!" : "!";
+        }
+
         sendMessage(user, information);
         games.remove(user.getUserName());
         sendRepeatGame(user);
@@ -554,19 +586,109 @@ public class TelegramBot extends TelegramLongPollingBot
      * @param currentUser - текущий пользователь
      * @param update - изменения
      */
-    private void lobbyCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        String callBackData = update.getCallbackQuery().getData();
-        String information = callBackData.substring(0, 13);
-        String pairUserName = callBackData.substring(13);
-        MyUser pairUser = allUsers.get(pairUserName);
-
-        switch (information)
+    private void lobbyCallbackQueryHandler(MyUser currentUser, Update update) throws ClassNotFoundException {
+        String rawInformation = update.getCallbackQuery().getData();
+        if (rawInformation.length() > 13)
         {
-            case "accept_Invite" -> treatAcceptInvite(currentUser, pairUser);
-            case "refuse_Invite" -> treatRefuseInvite(currentUser, pairUser);
+            String information = rawInformation.substring(0, 13);
+            String pairUserName = rawInformation.substring(13);
+            MyUser pairUser = allUsers.get(pairUserName);
+            switch (information)
+            {
+                case "accept_Invite" -> treatAcceptInvite(currentUser, pairUser);
+                case "refuse_Invite" -> treatRefuseInvite(currentUser, pairUser);
+            }
+        }
+        else
+        {
+            deleteLastMessage(currentUser);
+            switch (rawInformation)
+            {
+                case "my_stats" -> sendUserStatistics(currentUser);
+                case "top_10" -> sendTop10Users(currentUser);
+                case "rules" -> sendRules(currentUser);
+                case "prject_info" -> sendProjectInfo(currentUser);
+                case "back_to_main" -> sendMainLobbyMenu(currentUser);
+            }
         }
     }
+
+    private void sendProjectInfo(MyUser user)
+    {
+        sendWindow(user, "Находится в стадии разработки...");
+    }
+
+    private void sendRules(MyUser user)
+    {
+        sendWindow(user, "Находится в стадии разработки...");
+    }
+
+    private void sendTop10Users(MyUser user) throws ClassNotFoundException {
+        String queryResult;
+        try
+        {
+            queryResult = dataBaseHandler.getTop10Users();
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+        sendWindow(user, queryResult);
+    }
+
+    private void sendUserStatistics(MyUser user) throws ClassNotFoundException {
+        BigDecimal winRate = dataBaseHandler.getUserWinRate(user.getWins(), user.getLoses());
+        int position = dataBaseHandler.getSingleUserPosition(user);
+        Rank currentRank = RankList.ranks.get(user.getCurrentRankIdx());
+        String content =  "Твоя статистика:\n" +
+                "Общее количество игр: " + (user.getWins() + user.getLoses()) + "\n" +
+                "Из них: " + user.getWins() + " побед, " + user.getLoses() + " поражений\n" +
+                "Доля побед: " + winRate + "%\n" +
+                "Твое звание: " + currentRank.rank + "\n" +
+                "До следующего звания осталось: " +
+                (currentRank.experience - user.getExperience()) + " опыта\n" +
+                "Всего опыта: " + user.getExperience() + "\n" +
+                "Твое место среди всех пользователей: " + position;
+        sendWindow(user, content);
+    }
+
+    private InlineKeyboardMarkup getBackToMainMenuButton()
+    {
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(Collections.singletonList(InlineKeyboardButton.builder()
+                        .text("⬅️Вернуться в гланое меню")
+                        .callbackData("back_to_main").build()))).build();
+    }
+
+    private void sendWindow(MyUser user, String text)
+    {
+        SendMessage message = SendMessage.builder()
+                .chatId(user.getChatId())
+                .text(text)
+                .replyMarkup(getBackToMainMenuButton()).build();
+        try
+        {
+            Message sendedMessage = execute(message);
+            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
+            if (currentMessageStack == null)
+            {
+                Stack<Message> newStack = new Stack<>();
+                newStack.add(sendedMessage);
+                messageStacks.put(user.getChatId(), newStack);
+            }
+            else
+            {
+                currentMessageStack.add(sendedMessage);
+            }
+        }
+        catch (TelegramApiException e)
+        {
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendWindow(MyUser user, String text).\n" +
+                    e.getMessage());
+        }
+    }
+
     /**
      * метод для обработки принятия приглашения
      * @param whoAccepts - кто принимает
@@ -575,8 +697,9 @@ public class TelegramBot extends TelegramLongPollingBot
     private void treatAcceptInvite(MyUser whoAccepts, MyUser whoInvites)
     {
         Game newGame = new Game(whoInvites, whoAccepts);
-        deleteLastMessage(whoInvites);
+        deleteLastMessage(whoInvites, 2);
         deleteInvitationMessage(whoAccepts, whoInvites.getUserName());
+        deleteLastMessage(whoAccepts);
         prepareForShipSetting(whoInvites, whoAccepts, newGame);
         prepareForShipSetting(whoAccepts, whoInvites, newGame);
     }
@@ -595,11 +718,10 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     public void sendField(MyUser user, TelegramField field, String caption)
     {
-        InlineKeyboardMarkup keyboardMarkup = field.getKeyboardMarkup();
         SendMessage message = SendMessage.builder()
                 .chatId(user.getChatId())
                 .text(caption)
-                .replyMarkup(keyboardMarkup).build();
+                .replyMarkup(field.getKeyboardMarkup()).build();
         try
         {
             Message sendedMessage = execute(message);
@@ -675,7 +797,7 @@ public class TelegramBot extends TelegramLongPollingBot
             deleteMessageCounter = 3;
         else
             deleteMessageCounter = 4;
-        leaveAfterGame(currentUser, deleteMessageCounter);
+        leaveFromCurrentGame(currentUser, deleteMessageCounter);
     }
     private void permuteField(MyUser currentUser)
     {
@@ -767,25 +889,26 @@ public class TelegramBot extends TelegramLongPollingBot
         }
     }
 
-    private void registerUserAndGreet(Long chatId, User user) throws SQLException, ClassNotFoundException
+    private void registerUserAndGreet(Long chatId, User user) throws ClassNotFoundException
     {
         MyUser newUser = new MyUser(chatId, user.getUserName(), user.getFirstName(), State.IN_LOBBY);
         allUsers.put(user.getUserName(), newUser);
         dataBaseHandler.insertUserIntoDB(newUser);
-        sendGreetings(chatId, user);
+        sendGreetings(newUser);
     }
     /**
      * Метод, высылающий пользователю сообщение-приветствие
-     * @param chatId - куда отправить
      * @param user - кому отправить
      */
-    public void sendGreetings(Long chatId, User user)
+    public void sendGreetings(MyUser user)
     {
-        InputFile picture = new InputFile("https://www.blast.hk/data/avatars/o/345/345147.jpg?1636698629");
-        sendPhoto(chatId, picture, "Привет, " + user.getFirstName() + "! Добро пожаловать в морской ♂boy♂\n"+
-                "Сейчас ты находишься в лобби ожидания. Для того, чтобы начать игру, введи " +
-                "мне @userName своего друга (обязательно с @), с которым хочешь сыграть, либо же дождись," +
-                " когда это сделает он.", user);
+//        InputFile picture = new InputFile("https://www.blast.hk/data/avatars/o/345/345147.jpg?1636698629");
+//        sendPhoto(chatId, picture, "Привет, " + user.getFirstName() + "! Добро пожаловать в морской ♂boy♂\n"+
+//                "Сейчас ты находишься в лобби ожидания. Для того, чтобы начать игру, введи " +
+//                "мне @userName своего друга (обязательно с @), с которым хочешь сыграть, либо же дождись," +
+//                " когда это сделает он.", user);
+        sendMessageWithNoSave(user.getChatId(), user.getFirstName() + ", добро пожаловать в морской бой!");
+        sendMainLobbyMenu(user);
     }
     /**
      * метод для отправки приветственной открытки
@@ -810,6 +933,57 @@ public class TelegramBot extends TelegramLongPollingBot
                     " произошла ошибка в методе sendPhoto(Long chatId, InputFile photo, String caption, User user).\n" +
                     e.getMessage());
         }
+    }
+    private void sendMainLobbyMenu(MyUser user)
+    {
+        SendMessage message = SendMessage.builder()
+                .chatId(user.getChatId())
+                .text("Ты находишься лобби. Чтобы начать играть, пригласи пользователя, написав мне его @username " +
+                        "(обязательно с символом «@»!)")
+                .replyMarkup(getMainLobbyMenuKeyboard()).build();
+        try
+        {
+            Message sendedMessage = execute(message);
+            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
+            if (currentMessageStack == null)
+            {
+                Stack<Message> newStack = new Stack<>();
+                newStack.add(sendedMessage);
+                messageStacks.put(user.getChatId(), newStack);
+            }
+            else
+            {
+                currentMessageStack.add(sendedMessage);
+            }
+        }
+        catch (TelegramApiException e)
+        {
+            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
+                    " произошла ошибка в методе sendMainLobbyMenu(MyUser user).\n" +
+                    e.getMessage());
+        }
+
+    }
+    private InlineKeyboardMarkup getMainLobbyMenuKeyboard()
+    {
+        List<InlineKeyboardButton> row1 = Collections.singletonList(InlineKeyboardButton.builder()
+                .text("Моя статистика\uD83D\uDCC8")
+                .callbackData("my_stats").build());
+
+        List<InlineKeyboardButton> row2 = Collections.singletonList(InlineKeyboardButton.builder()
+                .text("Топ-10 пользователей\uD83C\uDFC6")
+                .callbackData("top_10").build());
+
+        List<InlineKeyboardButton> row3 = Collections.singletonList(InlineKeyboardButton.builder()
+                .text("Правила❓")
+                .callbackData("rules").build());
+
+        List<InlineKeyboardButton> row4 = Collections.singletonList(InlineKeyboardButton.builder()
+                .text("О проекте⚙️")
+                .callbackData("prject_info").build());
+
+        return InlineKeyboardMarkup.builder()
+                .keyboard(Arrays.asList(row1, row2, row3, row4)).build();
     }
     /**
      * метод отправки сообщений
