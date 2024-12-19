@@ -18,17 +18,16 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 import org.urfu.semyonovowa.dataBase.Query;
-import org.urfu.semyonovowa.game.MovingInformation;
-import org.urfu.semyonovowa.game.MovingInformationForBothPlayers;
 import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.game.Game;
+import org.urfu.semyonovowa.game.MovingInformation;
+import org.urfu.semyonovowa.game.MovingInformationForBothPlayers;
 import org.urfu.semyonovowa.ship.Ship;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.Rank;
 import org.urfu.semyonovowa.user.RankList;
 import org.urfu.semyonovowa.user.State;
 
-import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.*;
 /**
@@ -637,13 +636,12 @@ public class TelegramBot extends TelegramLongPollingBot
     }
 
     private void sendUserStatistics(MyUser user) throws ClassNotFoundException {
-        BigDecimal winRate = dataBaseHandler.getUserWinRate(user.getWins(), user.getLoses());
         int position = dataBaseHandler.getSingleUserPosition(user);
         Rank currentRank = RankList.ranks.get(user.getCurrentRankIdx());
         String content =  "Твоя статистика:\n" +
                 "Общее количество игр: " + (user.getWins() + user.getLoses()) + "\n" +
                 "Из них: " + user.getWins() + " побед, " + user.getLoses() + " поражений\n" +
-                "Доля побед: " + winRate + "%\n" +
+                "Доля побед: " + dataBaseHandler.getUserWinRate(user.getWins(), user.getLoses()) + "%\n" +
                 "Твое звание: " + currentRank.rank + "\n" +
                 "До следующего звания осталось: " +
                 (currentRank.experience - user.getExperience()) + " опыта\n" +
@@ -656,7 +654,7 @@ public class TelegramBot extends TelegramLongPollingBot
     {
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(Collections.singletonList(InlineKeyboardButton.builder()
-                        .text("⬅️Вернуться в гланое меню")
+                        .text("⬅️Вернуться в главное меню")
                         .callbackData("back_to_main").build()))).build();
     }
 
@@ -902,44 +900,21 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     public void sendGreetings(MyUser user)
     {
-//        InputFile picture = new InputFile("https://www.blast.hk/data/avatars/o/345/345147.jpg?1636698629");
-//        sendPhoto(chatId, picture, "Привет, " + user.getFirstName() + "! Добро пожаловать в морской ♂boy♂\n"+
-//                "Сейчас ты находишься в лобби ожидания. Для того, чтобы начать игру, введи " +
-//                "мне @userName своего друга (обязательно с @), с которым хочешь сыграть, либо же дождись," +
-//                " когда это сделает он.", user);
         sendMessageWithNoSave(user.getChatId(), user.getFirstName() + ", добро пожаловать в морской бой!");
         sendMainLobbyMenu(user);
     }
-    /**
-     * метод для отправки приветственной открытки
-     * @param chatId - куда отправить
-     * @param photo - открытка
-     * @param caption - надпись для открытки
-     * @param user - кому отправить
-     */
-    public void sendPhoto(Long chatId, InputFile photo, String caption, User user)
-    {
-        SendPhoto message = SendPhoto.builder()
-                .photo(photo)
-                .caption(caption)
-                .chatId(chatId).build();
-        try
-        {
-            execute(message);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendPhoto(Long chatId, InputFile photo, String caption, User user).\n" +
-                    e.getMessage());
-        }
-    }
+
     private void sendMainLobbyMenu(MyUser user)
     {
-        SendMessage message = SendMessage.builder()
+        InputFile menuPicture = new InputFile(getClass()
+                .getClassLoader()
+                .getResourceAsStream("images/mainMenuPicture.png"), "mainMenuPicture.png");
+
+        SendPhoto message = SendPhoto.builder()
                 .chatId(user.getChatId())
-                .text("Ты находишься лобби. Чтобы начать играть, пригласи пользователя, написав мне его @username " +
-                        "(обязательно с символом «@»!)")
+                .photo(menuPicture)
+                .caption("Ты находишься в лобби. Чтобы начать играть, пригласи пользователя, написав мне его @username "
+                        + "(обязательно с символом «@»!)")
                 .replyMarkup(getMainLobbyMenuKeyboard()).build();
         try
         {
