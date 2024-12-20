@@ -12,6 +12,7 @@ public class MyUser {
     private int loses;
     private int experience;
     private int currentRankIdx;
+    private final Integer lastMessageId;
     public MyUser(Long chatId, String userName, String firstName, String state)
     {
         this.chatId = chatId;
@@ -22,7 +23,23 @@ public class MyUser {
         this.loses = 0;
         this.experience = 0;
         this.currentRankIdx = 0;
+        this.lastMessageId = null;
     }
+    public MyUser(Long chatId, String userName, String firstName, int wins, int loses, int experience,
+                  int currentRankIdx, Integer lastMessageId)
+    {
+        this.chatId = chatId;
+        this.userName = userName;
+        this.firstName = firstName;
+        this.wins = wins;
+        this.loses = loses;
+        this.experience = experience;
+        this.currentRankIdx = currentRankIdx;
+        this.lastMessageId = lastMessageId;
+        this.state = State.IN_LOBBY;
+    }
+
+    public static MyUserBuilder builder() { return new MyUserBuilder(); }
 
     public Long getChatId()
     {
@@ -64,4 +81,6 @@ public class MyUser {
     public int getExperience() { return experience; }
 
     public void increaseExperience(int addend) { this.experience += addend;}
+
+    public Integer getLastMessageId() { return lastMessageId; }
 }
