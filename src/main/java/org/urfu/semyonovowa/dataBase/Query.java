@@ -38,10 +38,16 @@ public final class Query
             SET rank_index = ?
             WHERE chat_id = ?;
             """;
-    public static final String FREEZE_USER = """
+    public static final String FREEZE_USER_SQL = """
             UPDATE users
             SET last_message_id = ?
             WHERE chat_id = ?;
             """;
-    public static final String PULL_USER_FROM_DB = "SELECT * FROM users\nWHERE user_name = '";
+    public static final String UPDATE_USER_NAME_SQL = """
+            UPDATE users
+            SET user_name = ?
+            WHERE chat_id = ?;
+            """;
+    public static final String PULL_USER_BY_CHAT_ID_SQL = "SELECT * FROM users\nWHERE chat_id = ";
+    public static final String PULL_USER_BY_USER_NAME_SQL = "SELECT * FROM users\nWHERE user_name = '";
 }

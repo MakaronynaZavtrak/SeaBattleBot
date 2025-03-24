@@ -5,7 +5,7 @@ package org.urfu.semyonovowa.user;
  */
 public class MyUser {
     private final Long chatId;
-    private final String userName;
+    private String userName;
     private final String firstName;
     private String state;
     private int wins;
@@ -41,7 +41,7 @@ public class MyUser {
 
     public static MyUserBuilder builder() { return new MyUserBuilder(); }
 
-    public Long getChatId()
+    public long getChatId()
     {
         return chatId;
     }
@@ -50,6 +50,7 @@ public class MyUser {
     {
         return userName;
     }
+    public void setUserName(String userName){ this.userName = userName; }
 
     public String getFirstName()
     {

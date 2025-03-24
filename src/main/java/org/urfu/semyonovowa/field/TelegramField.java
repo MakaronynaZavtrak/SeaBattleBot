@@ -3,6 +3,7 @@ package org.urfu.semyonovowa.field;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.urfu.semyonovowa.ship.Ship;
+
 import java.util.*;
 public class TelegramField
 {
@@ -56,5 +57,14 @@ public class TelegramField
         List<List<InlineKeyboardButton>> buttons = keyboardMarkup.getKeyboard();
         buttons.get(y).get(x).setText(emoji);
         keyboardMarkup.setKeyboard(buttons);
+    }
+
+    public void showAllSurvivedEnemyShips(TelegramField winnerOwnField)
+    {
+        for (Map.Entry<String, Ship> entry : winnerOwnField.getShipsMap().entrySet())
+        {
+            if (!entry.getValue().getDamagedCages().contains(entry.getKey()))
+                editCage(entry.getKey(), FieldEmoji.SHIP_SIGN);
+        }
     }
 }

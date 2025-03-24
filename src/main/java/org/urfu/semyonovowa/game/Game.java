@@ -18,14 +18,14 @@ public class Game
 {
     private final MyUser creator;
     private final MyUser invitedUser;
-    private final Map<String, TelegramField> ownFields;
-    private final Map<String, TelegramField> enemyFields;
-    private final Map<String, List<Ship>> ships;
-    private final Map<String, Boolean> firstMovement;
+    private final Map<Long, TelegramField> ownFields;
+    private final Map<Long, TelegramField> enemyFields;
+    private final Map<Long, List<Ship>> ships;
+    private final Map<Long, Boolean> firstMovement;
     public MyUser getCreator(){return this.creator;}
-    public Map<String, TelegramField> getOwnFields(){return this.ownFields;}
-    public Map<String, TelegramField> getEnemyFields(){return this.enemyFields;}
-    public Map<String, List<Ship>> getShips(){return this.ships;}
+    public Map<Long, TelegramField> getOwnFields(){return this.ownFields;}
+    public Map<Long, TelegramField> getEnemyFields(){return this.enemyFields;}
+    public Map<Long, List<Ship>> getShips(){return this.ships;}
     public Game(MyUser creator, MyUser invitedUser)
     {
         this.creator = creator;
@@ -43,13 +43,13 @@ public class Game
     {
         TelegramField userOwnField = new TelegramField();
         userOwnField.setTelegramOwnField(baseField);
-        ownFields.put(user.getUserName(), userOwnField);
+        ownFields.put(user.getChatId(), userOwnField);
 
         TelegramField userEnemyField = new TelegramField();
         userEnemyField.setTelegramEnemyField(baseField);
-        enemyFields.put(user.getUserName(), userEnemyField);
+        enemyFields.put(user.getChatId(), userEnemyField);
 
-        ships.put(user.getUserName(), getUserShips());
+        ships.put(user.getChatId(), getUserShips());
     }
     private List<Ship> getUserShips()
     {
@@ -71,7 +71,7 @@ public class Game
      */
     public boolean setCage(String coordinates, MyUser user, Ship ship)
     {
-        TelegramField field = ownFields.get(user.getUserName());
+        TelegramField field = ownFields.get(user.getChatId());
         if (field.getShipsMap().containsKey(coordinates))
             return false;
         switch (user.getState())
@@ -450,8 +450,8 @@ public class Game
      */
     public MovingInformationForBothPlayers attack(MyUser attacker, String coordinates)
     {
-        MyUser defender = (attacker.getUserName().equals(creator.getUserName())) ?  invitedUser : creator;
-        TelegramField enemyField = ownFields.get(defender.getUserName());
+        MyUser defender = (attacker.getChatId() == creator.getChatId()) ?  invitedUser : creator;
+        TelegramField enemyField = ownFields.get(defender.getChatId());
         Ship currentShip = enemyField.getShipsMap().get(coordinates);
 
         if (currentShip != null)
@@ -469,7 +469,7 @@ public class Game
                                                               MyUser attacker)
     {
         enemyField.editCage(coordinates, FieldEmoji.MISS_SIGN);
-        enemyFields.get(attacker.getUserName()).editCage(coordinates, FieldEmoji.MISS_SIGN);
+        enemyFields.get(attacker.getChatId()).editCage(coordinates, FieldEmoji.MISS_SIGN);
         return MovingInformationForBothPlayers.MISS_INFO;
     }
     private MovingInformationForBothPlayers treatShipKilling(MyUser attacker, TelegramField enemyField,
@@ -478,7 +478,7 @@ public class Game
         for (String coordinate : currentShip.getDamagedCages())
         {
             enemyField.editCage(coordinate, FieldEmoji.KILL_SIGN);
-            enemyFields.get(attacker.getUserName()).editCage(coordinate, FieldEmoji.KILL_SIGN);
+            enemyFields.get(attacker.getChatId()).editCage(coordinate, FieldEmoji.KILL_SIGN);
         }
         return (enemyField.getAllLives() > 0)
                 ? MovingInformationForBothPlayers.KILL_INFO
@@ -489,16 +489,16 @@ public class Game
     {
         currentShip.decreaseLivesByOne();
         enemyField.editCage(coordinates, FieldEmoji.HURT_SIGN);
-        enemyFields.get(attacker.getUserName()).editCage(coordinates, FieldEmoji.HURT_SIGN);
+        enemyFields.get(attacker.getChatId()).editCage(coordinates, FieldEmoji.HURT_SIGN);
         return MovingInformationForBothPlayers.HURT_INFO;
     }
     public void resetOwnField(MyUser currentUser)
     {
         TelegramField newField = new TelegramField();
         newField.setTelegramOwnField(new BaseField());
-        ownFields.put(currentUser.getUserName(), newField);
-        ships.put(currentUser.getUserName(), getUserShips());
+        ownFields.put(currentUser.getChatId(), newField);
+        ships.put(currentUser.getChatId(), getUserShips());
     }
 
-    public Map<String, Boolean> getFirstMovement() {return firstMovement;}
+    public Map<Long, Boolean> getFirstMovement() {return firstMovement;}
 }
