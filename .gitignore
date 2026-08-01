@@ -1,35 +1,34 @@
+# Maven
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-### IntelliJ IDEA ###
+# IntelliJ IDEA
 .idea/
-*.iws
 *.iml
+*.iws
 *.ipr
+out/
 
-### Eclipse ###
-.apt_generated
+# Eclipse / VS Code
 .classpath
-.factorypath
 .project
-.settings
-.springBeans
-.sts4-cache
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+.settings/
 .vscode/
+bin/
 
-### Mac OS ###
-.DS_Store
+# Java
+*.class
+hs_err_pid*
+replay_pid*
+
+# Логи
+*.log
+logs/
+
+# Секреты и локальные настройки (НЕ коммитим токены и пароли!)
+.env
+application-local.yml
+application-local.properties
+*.properties.local
