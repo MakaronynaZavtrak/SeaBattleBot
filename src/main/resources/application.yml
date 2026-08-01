@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: sea-battle-bot
+
+bot:
+  name: ${BOT_NAME}
+  token: ${BOT_TOKEN}
+  creator-chat-id: ${BOT_CREATOR_CHAT_ID}
+
+db:
+  for-name: ${DB_DRIVER:org.postgresql.Driver}
+  url: ${DB_URL}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+
+logging:
+  level:
+    root: INFO
+    org.urfu.semyonovowa: INFO
+    org.telegram: WARN
