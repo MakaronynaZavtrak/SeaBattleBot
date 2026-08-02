@@ -1301,7 +1301,7 @@ public class TelegramBot extends TelegramLongPollingBot
         return InlineKeyboardMarkup.builder()
                 .keyboard(Arrays.asList(row1, row2)).build();
     }
-    public static TelegramBotBuilder builder() { return new TelegramBotBuilder(); }
+
     /**
      * геттер для имени бота
      * @return имя бота

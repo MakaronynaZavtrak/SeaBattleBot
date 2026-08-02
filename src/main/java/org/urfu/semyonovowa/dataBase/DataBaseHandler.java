@@ -48,12 +48,6 @@ public final class DataBaseHandler
     }
 
     /**
-     * Builder
-     * @return builder
-     */
-    public static DataBaseHandlerBuilder builder(){ return new DataBaseHandlerBuilder(); }
-
-    /**
      * Вставляет данные пользователя в базу данных
      * @param user пользователь, чьи данные заносятся в базу данных
      * @throws ClassNotFoundException если не найден класс forName
