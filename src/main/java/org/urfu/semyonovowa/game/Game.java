@@ -108,11 +108,12 @@ public class Game
         }
         else
         {
-            int varUnitIdx = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship)
+            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
+                    ? defineShipOrientation(coord, ship).orElse(null)
                     : ship.getOrientation();
-            if (varUnitIdx == 404)
+            if (orientation == null)
                 return false;
+            int varUnitIdx = orientation.axisIndex();
 
             int variableUnit = coord.axis(varUnitIdx);
             int fixedUnit = coord.axis(1 - varUnitIdx);
@@ -146,11 +147,12 @@ public class Game
         }
         else
         {
-            int varUnitIdx = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship)
+            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
+                    ? defineShipOrientation(coord, ship).orElse(null)
                     : ship.getOrientation();
-            if (varUnitIdx == 404)
+            if (orientation == null)
                 return false;
+            int varUnitIdx = orientation.axisIndex();
 
             int variableUnit = coord.axis(varUnitIdx);
             int fixedUnit = coord.axis(1 - varUnitIdx);
@@ -209,11 +211,12 @@ public class Game
     {
         if (!ship.getCoordinatesSet().isEmpty())
         {
-            int varUnitIdx = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship)
+            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
+                    ? defineShipOrientation(coord, ship).orElse(null)
                     : ship.getOrientation();
-            if (varUnitIdx == 404)
+            if (orientation == null)
                 return false;
+            int varUnitIdx = orientation.axisIndex();
 
             int variableUnit = coord.axis(varUnitIdx);
             int fixedUnit = coord.axis(1 - varUnitIdx);
@@ -254,23 +257,23 @@ public class Game
         return true;
     }
 
-    private int defineShipOrientation(Coord coord, Ship ship)
+    private Optional<Orientation> defineShipOrientation(Coord coord, Ship ship)
     {
         Coord firstCoord = Coord.parse(ship.getCoordinatesSet().stream().findFirst().get());
 
         if (coord.col() == firstCoord.col())
         {
-            ship.setOrientation(0);
+            ship.setOrientation(Orientation.VERTICAL);
             ship.setFixedVal(coord.col());
-            return 0;
+            return Optional.of(Orientation.VERTICAL);
         }
         if (coord.row() == firstCoord.row())
         {
-            ship.setOrientation(1);
+            ship.setOrientation(Orientation.HORIZONTAL);
             ship.setFixedVal(coord.row());
-            return 1;
+            return Optional.of(Orientation.HORIZONTAL);
         }
-        return 404;
+        return Optional.empty();
     }
 
     private void configureTheShip(ShipConfiguration configuration, TelegramField field, Ship ship)

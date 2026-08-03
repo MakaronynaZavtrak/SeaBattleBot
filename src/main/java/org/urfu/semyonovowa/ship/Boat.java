@@ -4,7 +4,6 @@ public class Boat extends Ship
 {
     public Boat()
     {
-        super();
-        setLives(1);
+        super(1);
     }
 }
