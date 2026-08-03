@@ -195,16 +195,17 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             switch (currentUser.getState())
             {
-                case State.IN_LOBBY -> lobbyCallbackQueryHandler(currentUser, update);
-                case State.LINCORE_SETTING -> linCoreSettingCallbackQueryHandler(currentUser, update);
-                case State.CRUISER_SETTING -> cruiserSettingCallbackQueryHandler(currentUser, update);
-                case State.ESMINEZ_1_SETTTING -> esminez1SettingCallbackQueryHandler(currentUser, update);
-                case State.ESMINEZ_2_SETTTING -> esminez2SettingCallbackQueryHandler(currentUser, update);
-                case State.BOAT_1_SETTING -> boat1SettingCallbackQueryHandler(currentUser, update);
-                case State.BOAT_2_SETTING -> boat2SettingCallbackQueryHandler(currentUser, update);
-                case State.BOAT_3_SETTING -> boat3SettingCallbackQueryHandler(currentUser, update);
-                case State.MOVING -> movingHandler(currentUser, update);
-                case State.FINISHED_GAME, State.WANT_TO_REPLAY -> revengeHandler(currentUser, update);
+                case IN_LOBBY -> lobbyCallbackQueryHandler(currentUser, update);
+                case LINCORE_SETTING -> linCoreSettingCallbackQueryHandler(currentUser, update);
+                case CRUISER_SETTING -> cruiserSettingCallbackQueryHandler(currentUser, update);
+                case ESMINEZ_1_SETTING -> esminez1SettingCallbackQueryHandler(currentUser, update);
+                case ESMINEZ_2_SETTING -> esminez2SettingCallbackQueryHandler(currentUser, update);
+                case BOAT_1_SETTING -> boat1SettingCallbackQueryHandler(currentUser, update);
+                case BOAT_2_SETTING -> boat2SettingCallbackQueryHandler(currentUser, update);
+                case BOAT_3_SETTING -> boat3SettingCallbackQueryHandler(currentUser, update);
+                case MOVING -> movingHandler(currentUser, update);
+                case FINISHED_GAME, WANT_TO_REPLAY -> revengeHandler(currentUser, update);
+                default -> {}
             }
         }
         else
@@ -401,7 +402,7 @@ public class TelegramBot extends TelegramLongPollingBot
     {
         Stack<Message> userStack = messageStacks.get(user.getChatId());
         Message lastMessage = userStack.peek();
-        String userState = user.getState();
+        State userState = user.getState();
 
         Boolean flag = game.getFirstMovement().get(user.getChatId());
         if (flag != null)
@@ -635,7 +636,7 @@ public class TelegramBot extends TelegramLongPollingBot
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez1))
         {
             if (esminez1.getCoordinatesSet().size() == esminez1.getLives())
-                currentUser.setState(State.ESMINEZ_2_SETTTING);
+                currentUser.setState(State.ESMINEZ_2_SETTING);
             editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
@@ -653,7 +654,7 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             if (cruiser.getCoordinatesSet().size() == cruiser.getLives())
             {
-                currentUser.setState(State.ESMINEZ_1_SETTTING);
+                currentUser.setState(State.ESMINEZ_1_SETTING);
                 editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
             }
             editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
@@ -910,8 +911,8 @@ public class TelegramBot extends TelegramLongPollingBot
         {
             switch (currentUser.getState())
             {
-                case State.IN_LOBBY -> lobbyMessageHandler(currentUser, update);
-                case State.WANT_TO_REPLAY, State.FINISHED_GAME -> endGameMessageHandler(currentUser, update);
+                case IN_LOBBY -> lobbyMessageHandler(currentUser, update);
+                case WANT_TO_REPLAY, FINISHED_GAME -> endGameMessageHandler(currentUser, update);
                 default -> gameMessageHandler(currentUser, update);
             }
         }
@@ -937,14 +938,14 @@ public class TelegramBot extends TelegramLongPollingBot
         String text = update.getMessage().getText();
         switch (text)
         {
-            case MessageCommand.PERMUTE -> { if (currentUser.getState().contains("setting")) permuteField(currentUser);}
+            case MessageCommand.PERMUTE -> { if (currentUser.getState().isPlacingShip()) permuteField(currentUser);}
             case MessageCommand.EXIT -> exitFromGameHandler(currentUser);
         }
     }
     private void exitFromGameHandler(MyUser currentUser)
     {
         int deleteMessageCounter;
-        if (currentUser.getState().contains("setting") || currentUser.getState().equals(State.READY_TO_PLAY))
+        if (currentUser.getState().isPlacingShip() || currentUser.getState().equals(State.READY_TO_PLAY))
             deleteMessageCounter = 1;
         else if (games.get(currentUser.getChatId()).getFirstMovement().get(currentUser.getChatId()) == null)
             deleteMessageCounter = 3;
@@ -1301,7 +1302,6 @@ public class TelegramBot extends TelegramLongPollingBot
         return InlineKeyboardMarkup.builder()
                 .keyboard(Arrays.asList(row1, row2)).build();
     }
-
     /**
      * геттер для имени бота
      * @return имя бота

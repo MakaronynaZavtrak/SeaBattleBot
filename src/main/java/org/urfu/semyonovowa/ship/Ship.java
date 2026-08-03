@@ -3,27 +3,32 @@ package org.urfu.semyonovowa.ship;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Ship
+/**
+ * Базовый корабль. Абстрактный: конкретное число жизней задают наследники
+ * (Boat, Esminez, Cruiser, LinCore), поэтому «пустого» корабля не существует.
+ */
+public abstract class Ship
 {
     private int lives;
     private final Set<String> coordinatesSet;
-    private int orientation;
+    private Orientation orientation;
     private final Set<String> damagedCages;
     private int fixedVal;
-    public Ship()
+
+    protected Ship(int lives)
     {
-        this.lives = 404;
+        this.lives = lives;
         this.coordinatesSet = new HashSet<>();
         this.damagedCages = new HashSet<>();
-        this.orientation = 404;
+        this.orientation = null;
     }
+
     public int getLives(){return this.lives;}
-    public void setLives(int lives){this.lives = lives;}
     public void decreaseLivesByOne(){this.lives--;}
     public Set<String> getCoordinatesSet(){return this.coordinatesSet;}
     public Set<String> getDamagedCages(){return this.damagedCages;}
-    public int getOrientation(){return this.orientation;}
-    public void setOrientation(int orientation) {this.orientation = orientation;}
+    public Orientation getOrientation(){return this.orientation;}
+    public void setOrientation(Orientation orientation) {this.orientation = orientation;}
     public int getFixedVal() {return fixedVal;}
     public void setFixedVal(int fixedVal) {this.fixedVal = fixedVal;}
 }

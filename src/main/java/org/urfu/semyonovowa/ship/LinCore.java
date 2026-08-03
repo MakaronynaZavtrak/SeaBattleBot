@@ -4,8 +4,7 @@ public class LinCore extends Ship
 {
     public LinCore()
     {
-        super();
-        setLives(4);
+        super(4);
     }
 
 }

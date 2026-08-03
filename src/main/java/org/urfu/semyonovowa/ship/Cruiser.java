@@ -4,7 +4,6 @@ public class Cruiser extends Ship
 {
     public Cruiser()
     {
-        super();
-        setLives(3);
+        super(3);
     }
 }

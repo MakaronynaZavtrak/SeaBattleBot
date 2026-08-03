@@ -7,8 +7,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Тесты иерархии кораблей: количество жизней и стартовые значения.
- * Значение-заглушка 404 у базового {@link Ship} зафиксировано намеренно —
- * на этапе 2 оно уйдёт вместе с магическими константами, и тест будет обновлён.
  */
 class ShipTest
 {
@@ -33,13 +31,10 @@ class ShipTest
     }
 
     @Test
-    @DisplayName("ориентация и жизни базового корабля — заглушка 404")
-    void baseShipUsesSentinelDefaults()
+    @DisplayName("у нового корабля ориентация не задана")
+    void freshShipHasUndefinedOrientation()
     {
-        Ship ship = new Ship();
-
-        assertThat(ship.getLives()).isEqualTo(404);
-        assertThat(ship.getOrientation()).isEqualTo(404);
+        assertThat(new Boat().getOrientation()).isNull();
     }
 
     @Test

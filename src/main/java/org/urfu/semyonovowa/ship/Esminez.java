@@ -4,7 +4,6 @@ public class Esminez extends Ship
 {
     public Esminez()
     {
-        super();
-        setLives(2);
+        super(2);
     }
 }
