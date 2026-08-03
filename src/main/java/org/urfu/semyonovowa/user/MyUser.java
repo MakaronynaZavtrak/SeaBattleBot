@@ -7,13 +7,13 @@ public class MyUser {
     private final Long chatId;
     private String userName;
     private final String firstName;
-    private String state;
+    private State state;
     private int wins;
     private int loses;
     private int experience;
     private int currentRankIdx;
     private final Integer lastMessageId;
-    public MyUser(Long chatId, String userName, String firstName, String state)
+    public MyUser(Long chatId, String userName, String firstName, State state)
     {
         this.chatId = chatId;
         this.userName = userName;
@@ -57,12 +57,12 @@ public class MyUser {
         return firstName;
     }
 
-    public String getState()
+    public State getState()
     {
         return state;
     }
 
-    public void setState(String state)
+    public void setState(State state)
     {
         this.state = state;
     }

@@ -5,7 +5,6 @@ import org.urfu.semyonovowa.field.BaseField;
 import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.ship.*;
 import org.urfu.semyonovowa.user.MyUser;
-import org.urfu.semyonovowa.user.State;
 
 import java.util.*;
 
@@ -76,9 +75,9 @@ public class Game
             return false;
         switch (user.getState())
         {
-            case State.LINCORE_SETTING -> {return setLinCoreCage(coordinates, field, ship);}
-            case State.CRUISER_SETTING -> {return setCruiserCage(coordinates, field, ship);}
-            case State.ESMINEZ_1_SETTTING, State.ESMINEZ_2_SETTTING -> {return setEsminezCage(coordinates, field, ship);}
+            case LINCORE_SETTING -> {return setLinCoreCage(coordinates, field, ship);}
+            case CRUISER_SETTING -> {return setCruiserCage(coordinates, field, ship);}
+            case ESMINEZ_1_SETTING, ESMINEZ_2_SETTING -> {return setEsminezCage(coordinates, field, ship);}
             default -> {return setBoatCage(coordinates, field, ship);}
         }
     }
