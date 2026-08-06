@@ -54,9 +54,11 @@ public class TelegramBot extends TelegramLongPollingBot
     private final String botUserName;
     private final Long creatorChatId;
     private final String botToken;
+    private final TelegramGateway gateway;
     public TelegramBot(String botUserName, String token, Long creatorChatId, DataBaseHandler dataBaseHandler)
     {
         super(token);
+        this.gateway = new TelegramGateway(this, creatorChatId);
         this.botUserName = botUserName;
         this.botToken = token;
         this.creatorChatId = creatorChatId;
@@ -512,16 +514,7 @@ public class TelegramBot extends TelegramLongPollingBot
                 .chatId(user.getChatId())
                 .messageId(message.getMessageId())
                 .text(editedText).build();
-        try
-        {
-            execute(editedMessage);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе editMessage(MyUser user, Message message, String editedText).\n" +
-                    e.getMessage());
-        }
+        gateway.edit(editedMessage);
     }
     /**
      * метод для установки третьего одножизненного корабля
@@ -693,16 +686,7 @@ public class TelegramBot extends TelegramLongPollingBot
                         .chatId(user.getChatId())
                         .messageId(messageId)
                         .replyMarkup(field.getKeyboardMarkup()).build();
-        try
-        {
-            execute(editedField);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе editField(MyUser user, Integer messageId, TelegramField field).\n" +
-                    e.getMessage());
-        }
+        gateway.edit(editedField);
     }
     /**
      * метод для обработки callback-действий, когда currentUser находится в лобби
@@ -1139,16 +1123,7 @@ public class TelegramBot extends TelegramLongPollingBot
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(whatToSend).build();
-        try
-        {
-            execute(message);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "Внимание! произошла ошибка в методе " +
-                    "sendMessageWithNoSave(Long chatId, String whatToSend).\n" +
-                    e.getMessage());
-        }
+        gateway.send(message);
     }
 
     private void deleteMessage(MyUser user, Integer messageId)
@@ -1156,16 +1131,7 @@ public class TelegramBot extends TelegramLongPollingBot
         DeleteMessage deleteMessage = DeleteMessage.builder()
                         .chatId(user.getChatId())
                         .messageId(messageId).build();
-        try
-        {
-            execute(deleteMessage);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе deleteMessage(MyUser user, Integer messageId).\n" +
-                    e.getMessage());
-        }
+        gateway.delete(deleteMessage);
     }
     /**
      * по заданному chatId удаляет последнее сообщение бота в диалоге
@@ -1266,10 +1232,10 @@ public class TelegramBot extends TelegramLongPollingBot
                         .chatId(whoIsInvited.getChatId())
                         .text(whoInvites.getFirstName() + " приглашает тебя поиграть в морской бой!")
                         .replyMarkup(getInviteKeyboard(whoInvites)).build();
-        try
+        invitedUsers.put(whoInvites.getChatId(), whoIsInvited);
+        Message sendedMessage = gateway.send(message);
+        if (sendedMessage != null)
         {
-            invitedUsers.put(whoInvites.getChatId(), whoIsInvited);
-            Message sendedMessage = execute(message);
             Map<Long, Integer> invitationTable = invitationMessages.get(whoIsInvited.getChatId());
             if (invitationTable == null)
             {
@@ -1277,12 +1243,6 @@ public class TelegramBot extends TelegramLongPollingBot
                 invitationTable = invitationMessages.get(whoIsInvited.getChatId());
             }
             invitationTable.put(whoInvites.getChatId(), sendedMessage.getMessageId());
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователей @" + whoIsInvited.getUserName() + "и @" +
-                      whoInvites.getUserName() + " произошла ошибка в методе sendInvite(MyUser whoIsInvited," +
-                    " MyUser whoInvites).\n" + e.getMessage());
         }
     }
     /**
