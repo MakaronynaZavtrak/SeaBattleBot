@@ -15,7 +15,6 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 import org.urfu.semyonovowa.dataBase.Query;
 import org.urfu.semyonovowa.field.TelegramField;
@@ -492,15 +491,7 @@ public class TelegramBot extends TelegramLongPollingBot
                 .chatId(user.getChatId())
                 .text("Хочешь сыграть с этим игроком еще раз?")
                 .replyMarkup(LobbyMenu.keyboardForSendingRepeatGame).build();
-        try
-        {
-            messageStacks.get(user.getChatId()).add(execute(message));
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                            " произошла ошибка в методе sendRepeatGame(MyUser user).\n" + e.getMessage());
-        }
+        saveToStack(user, gateway.send(message));
     }
     /**
      * метод для редактирования сообщений
@@ -792,27 +783,7 @@ public class TelegramBot extends TelegramLongPollingBot
                 .chatId(user.getChatId())
                 .text(text)
                 .replyMarkup(LobbyMenu.backToMainMenuButton).build();
-        try
-        {
-            Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
-            if (currentMessageStack == null)
-            {
-                Stack<Message> newStack = new Stack<>();
-                newStack.add(sendedMessage);
-                messageStacks.put(user.getChatId(), newStack);
-            }
-            else
-            {
-                currentMessageStack.add(sendedMessage);
-            }
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendWindow(MyUser user, String text).\n" +
-                    e.getMessage());
-        }
+        saveToStack(user, gateway.send(message));
     }
 
     /**
@@ -849,27 +820,7 @@ public class TelegramBot extends TelegramLongPollingBot
                 .chatId(user.getChatId())
                 .text(caption)
                 .replyMarkup(field.getKeyboardMarkup()).build();
-        try
-        {
-            Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
-            if (currentMessageStack == null)
-            {
-                Stack<Message> newStack = new Stack<>();
-                newStack.add(sendedMessage);
-                messageStacks.put(user.getChatId(), newStack);
-            }
-            else
-            {
-                currentMessageStack.add(sendedMessage);
-            }
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendField(MyUser user, TelegramField field, String caption).\n" +
-                    e.getMessage());
-        }
+        saveToStack(user, gateway.send(message));
     }
     /**
      * метод для обработки отклонения приглашения
@@ -1023,16 +974,7 @@ public class TelegramBot extends TelegramLongPollingBot
         DeleteMessage message = DeleteMessage.builder()
                 .messageId(messageId)
                 .chatId(user.getChatId()).build();
-        try
-        {
-            execute(message);
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе deleteInvitationMessage(MyUser user, String invitingUserName).\n" +
-                    e.getMessage());
-        }
+        gateway.delete(message);
     }
 
     private void registerUserAndGreet(Long chatId, User user) throws ClassNotFoundException
@@ -1064,59 +1006,29 @@ public class TelegramBot extends TelegramLongPollingBot
                 .caption("Ты находишься в лобби. Чтобы начать играть, пригласи пользователя, написав мне его @username "
             + "(обязательно с символом «@»!)")
                 .replyMarkup(LobbyMenu.mainLobbyMenuKeyBoard).build();
-        try
-        {
-            Message sendedMessage = execute(mainLobbyMenu);
-            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
-            if (currentMessageStack == null)
-            {
-                Stack<Message> newStack = new Stack<>();
-                newStack.add(sendedMessage);
-                messageStacks.put(user.getChatId(), newStack);
-            }
-            else
-            {
-                currentMessageStack.add(sendedMessage);
-            }
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendMainLobbyMenu(MyUser user).\n" +
-                    e.getMessage());
-        }
+        saveToStack(user, gateway.send(mainLobbyMenu));
     }
     /**
      * метод отправки сообщений
      * @param user кому отправить
      * @param whatToSend что отправить
      */
+    /**
+     * Сохраняет отправленное сообщение в стек пользователя, создавая стек при
+     * необходимости. Если сообщение null (отправка не удалась), ничего не делает.
+     */
+    private void saveToStack(MyUser user, Message message)
+    {
+        if (message == null)
+            return;
+        messageStacks.computeIfAbsent(user.getChatId(), key -> new Stack<>()).add(message);
+    }
     private void sendMessage(MyUser user, String whatToSend)
     {
         SendMessage message = SendMessage.builder()
                 .chatId(user.getChatId())
                 .text(whatToSend).build();
-        try
-        {
-            Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
-            if (currentMessageStack == null)
-            {
-                Stack<Message> newStack = new Stack<>();
-                newStack.add(sendedMessage);
-                messageStacks.put(user.getChatId(), newStack);
-            }
-            else
-            {
-                currentMessageStack.add(sendedMessage);
-            }
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendMessage(MyUser user, String whatToSend).\n" +
-                    e.getMessage());
-        }
+        saveToStack(user, gateway.send(message));
     }
     private void sendMessageWithNoSave(Long chatId, String whatToSend)
     {
@@ -1151,16 +1063,7 @@ public class TelegramBot extends TelegramLongPollingBot
             deleteMessage.setMessageId(currentMessageStack.pop().getMessageId());
         }
 
-        try
-        {
-            execute(deleteMessage);
-        }
-        catch (TelegramApiException e)
-        {
-            System.out.println("У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе deleteLastMessage(MyUser user). Его messageId = " +
-                    user.getLastMessageId() + "\n" + e.getMessage());
-        }
+        gateway.delete(deleteMessage);
     }
     /**
      * по заданному chatId удаляет последнее сообщение бота в диалоге
@@ -1176,15 +1079,7 @@ public class TelegramBot extends TelegramLongPollingBot
             DeleteMessage deleteMessage = DeleteMessage.builder()
                     .chatId(user.getChatId())
                     .messageId(currentMessageStack.pop().getMessageId()).build();
-            try
-            {
-                execute(deleteMessage);
-            } catch (TelegramApiException e)
-            {
-                sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                        " произошла ошибка в методе deleteLastMessage(MyUser user, int times).\n" +
-                        e.getMessage());
-            }
+            gateway.delete(deleteMessage);
         }
     }
     /**
@@ -1199,27 +1094,7 @@ public class TelegramBot extends TelegramLongPollingBot
                 .chatId(user.getChatId())
                 .text("Приглашение отправлено. Ожидай ответа!")
                 .replyMarkup(LobbyMenu.replyMarkupForWaitingMessage).build();
-        try
-        {
-            Message sendedMessage = execute(message);
-            Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
-            if (currentMessageStack == null)
-            {
-                Stack<Message> newStack = new Stack<>();
-                newStack.add(sendedMessage);
-                messageStacks.put(user.getChatId(), newStack);
-            }
-            else
-            {
-                currentMessageStack.add(sendedMessage);
-            }
-        }
-        catch (TelegramApiException e)
-        {
-            sendMessageWithNoSave(creatorChatId, "У пользователя @" + user.getUserName() +
-                    " произошла ошибка в методе sendWaitingMessage(MyUser user).\n" +
-                    e.getMessage());
-        }
+        saveToStack(user, gateway.send(message));
     }
     /**
      * метод для отправки приглашения на поединок
