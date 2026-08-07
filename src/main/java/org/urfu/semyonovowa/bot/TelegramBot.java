@@ -189,12 +189,12 @@ public class TelegramBot extends TelegramLongPollingBot
             switch (currentUser.getState())
             {
                 case IN_LOBBY -> lobbyCallbackQueryHandler(currentUser, update);
-                case LINCORE_SETTING -> linCoreSettingCallbackQueryHandler(currentUser, update);
-                case CRUISER_SETTING -> cruiserSettingCallbackQueryHandler(currentUser, update);
-                case ESMINEZ_1_SETTING -> esminez1SettingCallbackQueryHandler(currentUser, update);
-                case ESMINEZ_2_SETTING -> esminez2SettingCallbackQueryHandler(currentUser, update);
-                case BOAT_1_SETTING -> boat1SettingCallbackQueryHandler(currentUser, update);
-                case BOAT_2_SETTING -> boat2SettingCallbackQueryHandler(currentUser, update);
+                case LINCORE_SETTING -> handleShipSetting(currentUser, update, 0, State.CRUISER_SETTING, TIP.CRUISER);
+                case CRUISER_SETTING -> handleShipSetting(currentUser, update, 1, State.ESMINEZ_1_SETTING, TIP.ESMINEZS);
+                case ESMINEZ_1_SETTING -> handleShipSetting(currentUser, update, 2, State.ESMINEZ_2_SETTING, null);
+                case ESMINEZ_2_SETTING -> handleShipSetting(currentUser, update, 3, State.BOAT_1_SETTING, TIP.BOATS);
+                case BOAT_1_SETTING -> handleShipSetting(currentUser, update, 4, State.BOAT_2_SETTING, null);
+                case BOAT_2_SETTING -> handleShipSetting(currentUser, update, 5, State.BOAT_3_SETTING, null);
                 case BOAT_3_SETTING -> boat3SettingCallbackQueryHandler(currentUser, update);
                 case MOVING -> movingHandler(currentUser, update);
                 case FINISHED_GAME, WANT_TO_REPLAY -> revengeHandler(currentUser, update);
@@ -547,111 +547,26 @@ public class TelegramBot extends TelegramLongPollingBot
         }
     }
     /**
-     * метод для установки второго одножизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
+     * Общий обработчик расстановки корабля: ставит клетку по клику; при завершении
+     * корабля переводит пользователя в следующее состояние и, если задано, показывает
+     * подсказку. Заменил семь почти одинаковых обработчиков (последний корабль —
+     * особый, см. boat3SettingCallbackQueryHandler).
+     *
+     * @param shipIndex индекс корабля в списке кораблей игрока (0..5)
+     * @param nextState состояние после полной расстановки корабля
+     * @param tip       подсказка для следующего корабля, либо null
      */
-    private void boat2SettingCallbackQueryHandler(MyUser currentUser, Update update)
+    private void handleShipSetting(MyUser currentUser, Update update, int shipIndex, State nextState, String tip)
     {
         Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship boat2 = currentGame.getShips().get(currentUser.getChatId()).get(5);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat2))
+        Ship ship = currentGame.getShips().get(currentUser.getChatId()).get(shipIndex);
+        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, ship))
         {
-            if (boat2.getCoordinatesSet().size() == boat2.getLives())
-                currentUser.setState(State.BOAT_3_SETTING);
-            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getChatId()));
-        }
-    }
-    /**
-     * метод для установки первого одножизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
-     */
-    private void boat1SettingCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship boat1 = currentGame.getShips().get(currentUser.getChatId()).get(4);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat1))
-        {
-            if (boat1.getCoordinatesSet().size() == boat1.getLives())
-                currentUser.setState(State.BOAT_2_SETTING);
-            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getChatId()));
-        }
-    }
-    /**
-     * метод для установки второго двухжизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
-     */
-    private void esminez2SettingCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship esminez2 = currentGame.getShips().get(currentUser.getChatId()).get(3);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez2))
-        {
-            if (esminez2.getCoordinatesSet().size() == esminez2.getLives())
+            if (ship.getCoordinatesSet().size() == ship.getLives())
             {
-                currentUser.setState(State.BOAT_1_SETTING);
-                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.BOATS);
-            }
-            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getChatId()));
-        }
-    }
-    /**
-     * метод для установки первого двухжизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
-     */
-    private void esminez1SettingCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship esminez1 = currentGame.getShips().get(currentUser.getChatId()).get(2);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez1))
-        {
-            if (esminez1.getCoordinatesSet().size() == esminez1.getLives())
-                currentUser.setState(State.ESMINEZ_2_SETTING);
-            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getChatId()));
-        }
-    }
-    /**
-     * метод для установки единственного трехжизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
-     */
-    private void cruiserSettingCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship cruiser = currentGame.getShips().get(currentUser.getChatId()).get(1);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, cruiser))
-        {
-            if (cruiser.getCoordinatesSet().size() == cruiser.getLives())
-            {
-                currentUser.setState(State.ESMINEZ_1_SETTING);
-                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
-            }
-            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
-                    currentGame.getOwnFields().get(currentUser.getChatId()));
-        }
-    }
-    /**
-     * метод для установки единственного четырезжизненного корабля
-     * @param currentUser текущий пользователь
-     * @param update изменения
-     */
-    private void linCoreSettingCallbackQueryHandler(MyUser currentUser, Update update)
-    {
-        Game currentGame = sessions.games().get(currentUser.getChatId());
-        Ship linCore = currentGame.getShips().get(currentUser.getChatId()).get(0);
-        if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, linCore))
-        {
-            if (linCore.getCoordinatesSet().size() == linCore.getLives())
-            {
-                currentUser.setState(State.CRUISER_SETTING);
-                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.CRUISER);
+                currentUser.setState(nextState);
+                if (tip != null)
+                    editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), tip);
             }
             editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
