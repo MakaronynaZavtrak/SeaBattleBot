@@ -43,13 +43,9 @@ import java.util.stream.Collectors;
  */
 public class TelegramBot extends TelegramLongPollingBot
 {
-    private final Map<Long, Map<Long, Integer>> invitationMessages;
-    private final Map<Long, Stack<Message>> messageStacks;
-    private final Map<Long, MyUser> invitedUsers;
+    private final SessionRegistry sessions;
     private final Cache<Long, MyUser> userCache;
     private final DataBaseHandler dataBaseHandler;
-    private final Map<Long, Long> userPairs;
-    private final Map<Long, Game> games;
     private final String botUserName;
     private final Long creatorChatId;
     private final String botToken;
@@ -61,11 +57,7 @@ public class TelegramBot extends TelegramLongPollingBot
         this.botUserName = botUserName;
         this.botToken = token;
         this.creatorChatId = creatorChatId;
-        this.userPairs = new HashMap<>();
-        this.messageStacks = new HashMap<>();
-        this.invitationMessages = new HashMap<>();
-        this.invitedUsers = new HashMap<>();
-        this.games = new HashMap<>();
+        this.sessions = new SessionRegistry();
         this.dataBaseHandler = dataBaseHandler;
         this.userCache = CacheBuilder.newBuilder()
                 .expireAfterAccess(10, TimeUnit.MINUTES)
@@ -83,12 +75,12 @@ public class TelegramBot extends TelegramLongPollingBot
             cleanTrailsBeforeFreeze(user);
         else
         {
-            Stack<Message> currentStack = messageStacks.get(user.getChatId());
+            Stack<Message> currentStack = sessions.messageStacks().get(user.getChatId());
             if (currentStack != null)
                 deleteLastMessage(user, currentStack.size() - 1);
         }
 
-        Long pairUserChatId = userPairs.get(user.getChatId());
+        Long pairUserChatId = sessions.userPairs().get(user.getChatId());
         if (pairUserChatId != null)
         {
             MyUser pairUser = userCache.getIfPresent(pairUserChatId);
@@ -98,7 +90,7 @@ public class TelegramBot extends TelegramLongPollingBot
         try
         {
             Integer messageId;
-            Stack<Message> currentStack = messageStacks.get(user.getChatId());
+            Stack<Message> currentStack = sessions.messageStacks().get(user.getChatId());
             messageId = (currentStack == null || currentStack.isEmpty())
                     ? user.getLastMessageId()
                     : currentStack.pop().getMessageId();
@@ -114,7 +106,7 @@ public class TelegramBot extends TelegramLongPollingBot
     private void cleanTrailsBeforeFreeze(MyUser user)
     {
         user.setState(State.IN_LOBBY);
-        while (!messageStacks.get(user.getChatId()).isEmpty())
+        while (!sessions.messageStacks().get(user.getChatId()).isEmpty())
             deleteLastMessage(user);
         sendMessageWithNoSave(user.getChatId(), TIP.TIMEOUT);
         sendMainLobbyMenu(user);
@@ -122,35 +114,35 @@ public class TelegramBot extends TelegramLongPollingBot
 
     private void freeMemoryFrom(MyUser user)
     {
-        if (invitationMessages.get(user.getChatId()) != null)
+        if (sessions.invitationMessages().get(user.getChatId()) != null)
         {
-            if (!invitationMessages.get(user.getChatId()).isEmpty())
+            if (!sessions.invitationMessages().get(user.getChatId()).isEmpty())
             {
-                for (Map.Entry<Long, Integer> entry : invitationMessages.get(user.getChatId()).entrySet())
+                for (Map.Entry<Long, Integer> entry : sessions.invitationMessages().get(user.getChatId()).entrySet())
                 {
                     deleteMessage(user, entry.getValue());
                 }
             }
-            invitationMessages.remove(user.getChatId());
+            sessions.invitationMessages().remove(user.getChatId());
         }
 
-        Stack<Message> currentStack = messageStacks.get(user.getChatId());
+        Stack<Message> currentStack = sessions.messageStacks().get(user.getChatId());
         if (currentStack != null)
             while (!currentStack.isEmpty())
                 deleteMessage(user, currentStack.pop().getMessageId());
 
-        Long pairUserChatId = userPairs.get(user.getChatId());
+        Long pairUserChatId = sessions.userPairs().get(user.getChatId());
         if (pairUserChatId != null)
         {
-            userPairs.remove(user.getChatId());
-            userPairs.remove(pairUserChatId);
+            sessions.userPairs().remove(user.getChatId());
+            sessions.userPairs().remove(pairUserChatId);
         }
-        Game game = games.get(user.getChatId());
+        Game game = sessions.games().get(user.getChatId());
         if (game != null)
         {
-            games.remove(user.getChatId());
+            sessions.games().remove(user.getChatId());
             if (pairUserChatId != null)
-                games.remove(pairUserChatId);
+                sessions.games().remove(pairUserChatId);
         }
     }
 
@@ -255,10 +247,10 @@ public class TelegramBot extends TelegramLongPollingBot
 
     private void commonLeaveGame(MyUser currentUser, int times, String textAfter)
     {
-        Long pairUserChatId = userPairs.get(currentUser.getChatId());
+        Long pairUserChatId = sessions.userPairs().get(currentUser.getChatId());
         MyUser pairUser = userCache.getIfPresent(pairUserChatId);
-        userPairs.remove(pairUserChatId);
-        userPairs.remove(currentUser.getChatId());
+        sessions.userPairs().remove(pairUserChatId);
+        sessions.userPairs().remove(currentUser.getChatId());
         commonCleanTrailsEndGame(currentUser, times, "");
         if (pairUser != null)
             commonCleanTrailsEndGame(pairUser, times, currentUser.getFirstName() + textAfter);
@@ -293,7 +285,7 @@ public class TelegramBot extends TelegramLongPollingBot
 
         currentUser.setState(State.WANT_TO_REPLAY);
 
-        MyUser pairUser = userCache.getIfPresent(userPairs.get(currentUser.getChatId()));
+        MyUser pairUser = userCache.getIfPresent(sessions.userPairs().get(currentUser.getChatId()));
         if (pairUser != null && pairUser.getState().equals(State.WANT_TO_REPLAY))
         {
             Game newGame = new Game(pairUser, currentUser);
@@ -304,7 +296,7 @@ public class TelegramBot extends TelegramLongPollingBot
     private void prepareForReplay(MyUser user, Game game)
     {
         user.setState(State.LINCORE_SETTING);
-        games.put(user.getChatId(), game);
+        sessions.games().put(user.getChatId(), game);
         deleteLastMessage(user, 4);
         sendField(user, game.getOwnFields().get(user.getChatId()), TIP.LINCORE);
     }
@@ -315,9 +307,9 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void movingHandler(MyUser currentUser, Update update) throws ClassNotFoundException
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         String coordinates = update.getCallbackQuery().getData().substring(1);
-        Long pairUserChatId = userPairs.get(currentUser.getChatId());
+        Long pairUserChatId = sessions.userPairs().get(currentUser.getChatId());
         Set<String> usedCages = currentGame.getOwnFields().get(pairUserChatId).getUsedCages();
 
         if (usedCages.contains(coordinates))
@@ -348,11 +340,11 @@ public class TelegramBot extends TelegramLongPollingBot
     private void treatWinMovement(MyUser user, Game game, String information)
     {
         deleteLastMessage(user, 2);
-        Stack<Message> userStack = messageStacks.get(user.getChatId());
+        Stack<Message> userStack = sessions.messageStacks().get(user.getChatId());
 
         if (user.getState().equals(State.WAITING))
         {
-            MyUser winner = userCache.getIfPresent(userPairs.get(user.getChatId()));
+            MyUser winner = userCache.getIfPresent(sessions.userPairs().get(user.getChatId()));
             if (winner != null)
             {
                 TelegramField winnerOwnField = game.getOwnFields().get(winner.getChatId());
@@ -390,7 +382,7 @@ public class TelegramBot extends TelegramLongPollingBot
         }
 
         sendMessage(user, information);
-        games.remove(user.getChatId());
+        sessions.games().remove(user.getChatId());
         sendRepeatGame(user);
     }
     /**
@@ -401,7 +393,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void treatNotWinMovement(MyUser user, Game game, String information)
     {
-        Stack<Message> userStack = messageStacks.get(user.getChatId());
+        Stack<Message> userStack = sessions.messageStacks().get(user.getChatId());
         Message lastMessage = userStack.peek();
         State userState = user.getState();
 
@@ -457,7 +449,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void treatNotFirstMovement(MyUser user, String userInformation, Message lastMessage)
     {
-        Stack<Message> userMessageStack = messageStacks.get(user.getChatId());
+        Stack<Message> userMessageStack = sessions.messageStacks().get(user.getChatId());
         userMessageStack.pop();
         Message infoMsg = userMessageStack.peek();
 
@@ -514,7 +506,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat3SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         final int LAST_SHIP = 6;
         Ship boat3 = currentGame.getShips().get(currentUser.getChatId()).get(LAST_SHIP);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat3))
@@ -522,12 +514,12 @@ public class TelegramBot extends TelegramLongPollingBot
             if (boat3.getCoordinatesSet().size() == boat3.getLives())
             {
                 currentUser.setState(State.READY_TO_PLAY);
-                MyUser pairUser = userCache.getIfPresent(userPairs.get(currentUser.getChatId()));
+                MyUser pairUser = userCache.getIfPresent(sessions.userPairs().get(currentUser.getChatId()));
                 if (pairUser != null && !pairUser.getState().equals(State.READY_TO_PLAY))
                 {
-                    editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(),
+                    editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(),
                             "Подожди, твой противник еще расставляет корабли");
-                    editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+                    editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                             currentGame.getOwnFields().get(currentUser.getChatId()));
                 }
                 else
@@ -561,13 +553,13 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat2SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship boat2 = currentGame.getShips().get(currentUser.getChatId()).get(5);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat2))
         {
             if (boat2.getCoordinatesSet().size() == boat2.getLives())
                 currentUser.setState(State.BOAT_3_SETTING);
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -578,13 +570,13 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void boat1SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship boat1 = currentGame.getShips().get(currentUser.getChatId()).get(4);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, boat1))
         {
             if (boat1.getCoordinatesSet().size() == boat1.getLives())
                 currentUser.setState(State.BOAT_2_SETTING);
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -595,16 +587,16 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void esminez2SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship esminez2 = currentGame.getShips().get(currentUser.getChatId()).get(3);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez2))
         {
             if (esminez2.getCoordinatesSet().size() == esminez2.getLives())
             {
                 currentUser.setState(State.BOAT_1_SETTING);
-                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.BOATS);
+                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.BOATS);
             }
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -615,13 +607,13 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void esminez1SettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship esminez1 = currentGame.getShips().get(currentUser.getChatId()).get(2);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, esminez1))
         {
             if (esminez1.getCoordinatesSet().size() == esminez1.getLives())
                 currentUser.setState(State.ESMINEZ_2_SETTING);
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -632,16 +624,16 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void cruiserSettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship cruiser = currentGame.getShips().get(currentUser.getChatId()).get(1);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, cruiser))
         {
             if (cruiser.getCoordinatesSet().size() == cruiser.getLives())
             {
                 currentUser.setState(State.ESMINEZ_1_SETTING);
-                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
+                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.ESMINEZS);
             }
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -652,16 +644,16 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void linCoreSettingCallbackQueryHandler(MyUser currentUser, Update update)
     {
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         Ship linCore = currentGame.getShips().get(currentUser.getChatId()).get(0);
         if (currentGame.setCage(update.getCallbackQuery().getData(), currentUser, linCore))
         {
             if (linCore.getCoordinatesSet().size() == linCore.getLives())
             {
                 currentUser.setState(State.CRUISER_SETTING);
-                editMessage(currentUser, messageStacks.get(currentUser.getChatId()).peek(), TIP.CRUISER);
+                editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), TIP.CRUISER);
             }
-            editField(currentUser, messageStacks.get(currentUser.getChatId()).peek().getMessageId(),
+            editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
         }
     }
@@ -804,8 +796,8 @@ public class TelegramBot extends TelegramLongPollingBot
     private void prepareForShipSetting(MyUser user1, MyUser user2, Game game)
     {
         user1.setState(State.LINCORE_SETTING);
-        games.put(user1.getChatId(), game);
-        userPairs.put(user1.getChatId(), user2.getChatId());
+        sessions.games().put(user1.getChatId(), game);
+        sessions.userPairs().put(user1.getChatId(), user2.getChatId());
         sendField(user1, game.getOwnFields().get(user1.getChatId()), TIP.LINCORE);
     }
     /**
@@ -882,7 +874,7 @@ public class TelegramBot extends TelegramLongPollingBot
         int deleteMessageCounter;
         if (currentUser.getState().isPlacingShip() || currentUser.getState().equals(State.READY_TO_PLAY))
             deleteMessageCounter = 1;
-        else if (games.get(currentUser.getChatId()).getFirstMovement().get(currentUser.getChatId()) == null)
+        else if (sessions.games().get(currentUser.getChatId()).getFirstMovement().get(currentUser.getChatId()) == null)
             deleteMessageCounter = 3;
         else
             deleteMessageCounter = 4;
@@ -891,7 +883,7 @@ public class TelegramBot extends TelegramLongPollingBot
     private void permuteField(MyUser currentUser)
     {
         deleteLastMessage(currentUser);
-        Game currentGame = games.get(currentUser.getChatId());
+        Game currentGame = sessions.games().get(currentUser.getChatId());
         currentGame.resetOwnField(currentUser);
         currentUser.setState(State.LINCORE_SETTING);
         sendField(currentUser, currentGame.getOwnFields().get(currentUser.getChatId()), TIP.LINCORE);
@@ -962,14 +954,14 @@ public class TelegramBot extends TelegramLongPollingBot
     {
         deleteLastMessage(invitingUser);
         Long invitingUserChatId = invitingUser.getChatId();
-        deleteInvitationMessage(invitedUsers.get(invitingUserChatId), invitingUserChatId);
+        deleteInvitationMessage(sessions.invitedUsers().get(invitingUserChatId), invitingUserChatId);
     }
 
     private void deleteInvitationMessage(MyUser user, Long invitingUserChatId)
     {
-        Integer messageId = invitationMessages.get(user.getChatId()).get(invitingUserChatId);
-        invitationMessages.get(user.getChatId()).remove(invitingUserChatId);
-        invitedUsers.remove(invitingUserChatId);
+        Integer messageId = sessions.invitationMessages().get(user.getChatId()).get(invitingUserChatId);
+        sessions.invitationMessages().get(user.getChatId()).remove(invitingUserChatId);
+        sessions.invitedUsers().remove(invitingUserChatId);
 
         DeleteMessage message = DeleteMessage.builder()
                 .messageId(messageId)
@@ -1021,7 +1013,7 @@ public class TelegramBot extends TelegramLongPollingBot
     {
         if (message == null)
             return;
-        messageStacks.computeIfAbsent(user.getChatId(), key -> new Stack<>()).add(message);
+        sessions.messageStacks().computeIfAbsent(user.getChatId(), key -> new Stack<>()).add(message);
     }
     private void sendMessage(MyUser user, String whatToSend)
     {
@@ -1051,7 +1043,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void deleteLastMessage(MyUser user)
     {
-        Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
+        Stack<Message> currentMessageStack = sessions.messageStacks().get(user.getChatId());
         DeleteMessage deleteMessage = new DeleteMessage();
         deleteMessage.setChatId(user.getChatId());
         if (currentMessageStack == null || currentMessageStack.isEmpty())
@@ -1071,7 +1063,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private void deleteLastMessage(MyUser user, int times)
     {
-        Stack<Message> currentMessageStack = messageStacks.get(user.getChatId());
+        Stack<Message> currentMessageStack = sessions.messageStacks().get(user.getChatId());
         if (currentMessageStack == null)
             return;
         for (int i = 0; i < times && !currentMessageStack.isEmpty(); i++)
@@ -1107,15 +1099,15 @@ public class TelegramBot extends TelegramLongPollingBot
                         .chatId(whoIsInvited.getChatId())
                         .text(whoInvites.getFirstName() + " приглашает тебя поиграть в морской бой!")
                         .replyMarkup(getInviteKeyboard(whoInvites)).build();
-        invitedUsers.put(whoInvites.getChatId(), whoIsInvited);
+        sessions.invitedUsers().put(whoInvites.getChatId(), whoIsInvited);
         Message sendedMessage = gateway.send(message);
         if (sendedMessage != null)
         {
-            Map<Long, Integer> invitationTable = invitationMessages.get(whoIsInvited.getChatId());
+            Map<Long, Integer> invitationTable = sessions.invitationMessages().get(whoIsInvited.getChatId());
             if (invitationTable == null)
             {
-                invitationMessages.put(whoIsInvited.getChatId(), new HashMap<>());
-                invitationTable = invitationMessages.get(whoIsInvited.getChatId());
+                sessions.invitationMessages().put(whoIsInvited.getChatId(), new HashMap<>());
+                invitationTable = sessions.invitationMessages().get(whoIsInvited.getChatId());
             }
             invitationTable.put(whoInvites.getChatId(), sendedMessage.getMessageId());
         }
