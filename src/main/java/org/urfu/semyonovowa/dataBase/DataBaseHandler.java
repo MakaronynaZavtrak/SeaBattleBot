@@ -3,12 +3,12 @@ package org.urfu.semyonovowa.dataBase;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.RankList;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
 
 /**
  * Реализует задачи обращения к базе данных
@@ -17,17 +17,9 @@ import java.util.Properties;
 public final class DataBaseHandler
 {
     /**
-     * Название драйвера
+     * Пул соединений с базой данных
      */
-    private final String forName;
-    /**
-     * Ссылка для соединения с базой данных
-     */
-    private final String url;
-    /**
-     * Данные для авторизации в базе данных
-     */
-    private final Properties properties;
+    private final DataSource dataSource;
     /**
      * Конейнер для хранения транзакций
      */
@@ -35,15 +27,11 @@ public final class DataBaseHandler
 
     /**
      * Конструктор
-     * @param forName название драйвера
-     * @param url ссылка на базу данных, располагаемую на удаленном сервере
-     * @param properties обёртка логина и пароля для подключения
+     * @param dataSource пул соединений с базой данных (HikariCP, конфигурируется Spring Boot)
      */
-    public DataBaseHandler(String forName, String url, Properties properties)
+    public DataBaseHandler(DataSource dataSource)
     {
-        this.forName = forName;
-        this.url = url;
-        this.properties = properties;
+        this.dataSource = dataSource;
         this.batchHolder = new ArrayList<>();
     }
 
@@ -54,8 +42,7 @@ public final class DataBaseHandler
      */
     public void insertUserIntoDB(MyUser user) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.INSERT_USER_INTO_DB_SQL))
         {
             preparedStatement.setLong(1, user.getChatId());
@@ -95,8 +82,7 @@ public final class DataBaseHandler
      */
     public String getTop10Users() throws ClassNotFoundException, SQLException {
         StringBuilder result = new StringBuilder();
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement())
         {
             ResultSet resultSet = statement.executeQuery(Query.GET_TOP_10_USERS_SQL);
@@ -133,9 +119,8 @@ public final class DataBaseHandler
      */
     public int getSingleUserPosition(MyUser user) throws ClassNotFoundException
     {
-        Class.forName(forName);
         int index = 1;
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement())
         {
             ResultSet resultSet = statement.executeQuery(Query.GET_POSITION_SQL);
@@ -162,8 +147,7 @@ public final class DataBaseHandler
      */
     public void executeAddedQueries() throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties))
+        try (Connection connection = dataSource.getConnection())
         {
             connection.setAutoCommit(false);
             for (BatchContainer container : batchHolder)
@@ -189,8 +173,7 @@ public final class DataBaseHandler
      */
     public void freezeUser(MyUser user, Integer messageId) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.FREEZE_USER_SQL))
         {
             preparedStatement.setInt(1, messageId);
@@ -213,7 +196,7 @@ public final class DataBaseHandler
                 : Query.PULL_USER_BY_CHAT_ID_SQL + data + ";";
 
         MyUser pulledUser = null;
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement())
         {
             ResultSet resultSet = statement.executeQuery(sql);
@@ -241,8 +224,7 @@ public final class DataBaseHandler
      */
     public void updateUserName(MyUser user, String newUserName) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.UPDATE_USER_NAME_SQL))
         {
             preparedStatement.setString(1, newUserName);
