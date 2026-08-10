@@ -86,7 +86,7 @@ public final class DataBaseHandler
              Statement statement = connection.createStatement())
         {
             ResultSet resultSet = statement.executeQuery(Query.GET_TOP_10_USERS_SQL);
-            for (int number = 1; resultSet.next() && number < 11; number++)
+            for (int number = 1; resultSet.next(); number++)
             {
                 String firstName = resultSet.getString(Column.FIRST_NAME);
                 int rankIdx = resultSet.getInt(Column.RANK_INDEX);
@@ -119,17 +119,18 @@ public final class DataBaseHandler
      */
     public int getSingleUserPosition(MyUser user) throws ClassNotFoundException
     {
-        int index = 1;
         try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement())
+             PreparedStatement preparedStatement = connection.prepareStatement(Query.GET_POSITION_SQL))
         {
-            ResultSet resultSet = statement.executeQuery(Query.GET_POSITION_SQL);
-            for (; resultSet.next(); index++)
-                if (resultSet.getLong(Column.CHAT_ID) == user.getChatId())
-                    return index;
+            preparedStatement.setLong(1, user.getChatId());
+            try (ResultSet resultSet = preparedStatement.executeQuery())
+            {
+                if (resultSet.next())
+                    return resultSet.getInt(Column.POSITION);
+            }
         }
         catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
-        return index;
+        return 1;
     }
 
     /**

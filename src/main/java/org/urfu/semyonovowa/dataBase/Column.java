@@ -11,4 +11,5 @@ public final class Column
     public static final String WINS = "wins";
     public static final String LOSES = "loses";
     public static final String LAST_MESSAGE_ID = "last_message_id";
+    public static final String POSITION = "position";
 }
