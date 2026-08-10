@@ -48,6 +48,6 @@ public final class Query
             SET user_name = ?
             WHERE chat_id = ?;
             """;
-    public static final String PULL_USER_BY_CHAT_ID_SQL = "SELECT * FROM users\nWHERE chat_id = ";
-    public static final String PULL_USER_BY_USER_NAME_SQL = "SELECT * FROM users\nWHERE user_name = '";
+    public static final String PULL_USER_BY_CHAT_ID_SQL = "SELECT * FROM users WHERE chat_id = ?;";
+    public static final String PULL_USER_BY_USER_NAME_SQL = "SELECT * FROM users WHERE user_name = ?;";
 }

@@ -191,26 +191,35 @@ public final class DataBaseHandler
      */
     public MyUser pullUserFromDB(Object data)
     {
-        String sql = (data instanceof String)
-                ? Query.PULL_USER_BY_USER_NAME_SQL + data +  "';"
-                : Query.PULL_USER_BY_CHAT_ID_SQL + data + ";";
+        boolean byUserName = data instanceof String;
+        String sql = byUserName
+                ? Query.PULL_USER_BY_USER_NAME_SQL
+                : Query.PULL_USER_BY_CHAT_ID_SQL;
 
         MyUser pulledUser = null;
         try (Connection connection = dataSource.getConnection();
-             Statement statement = connection.createStatement())
+             PreparedStatement preparedStatement = connection.prepareStatement(sql))
         {
-            ResultSet resultSet = statement.executeQuery(sql);
-            resultSet.next();
+            if (byUserName)
+                preparedStatement.setString(1, (String) data);
+            else
+                preparedStatement.setLong(1, (Long) data);
 
-            pulledUser = MyUser.builder()
-                    .chatId(resultSet.getLong(Column.CHAT_ID))
-                    .userName(resultSet.getString(Column.USER_NAME))
-                    .firstName(resultSet.getString(Column.FIRST_NAME))
-                    .currentRankIdx(resultSet.getInt(Column.RANK_INDEX))
-                    .experience(resultSet.getInt(Column.EXPERIENCE))
-                    .wins(resultSet.getInt(Column.WINS))
-                    .loses(resultSet.getInt(Column.LOSES))
-                    .lastMessageId(resultSet.getInt(Column.LAST_MESSAGE_ID)).build();
+            try (ResultSet resultSet = preparedStatement.executeQuery())
+            {
+                if (resultSet.next())
+                {
+                    pulledUser = MyUser.builder()
+                            .chatId(resultSet.getLong(Column.CHAT_ID))
+                            .userName(resultSet.getString(Column.USER_NAME))
+                            .firstName(resultSet.getString(Column.FIRST_NAME))
+                            .currentRankIdx(resultSet.getInt(Column.RANK_INDEX))
+                            .experience(resultSet.getInt(Column.EXPERIENCE))
+                            .wins(resultSet.getInt(Column.WINS))
+                            .loses(resultSet.getInt(Column.LOSES))
+                            .lastMessageId(resultSet.getInt(Column.LAST_MESSAGE_ID)).build();
+                }
+            }
         }
         catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
         return pulledUser;
