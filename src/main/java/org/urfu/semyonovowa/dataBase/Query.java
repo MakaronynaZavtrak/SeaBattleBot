@@ -10,13 +10,18 @@ public final class Query
             """;
     public static final String GET_TOP_10_USERS_SQL =
             """
-            SELECT first_name, rank_index, wins, loses from users
-            ORDER BY wins DESC;
+            SELECT first_name, rank_index, wins, loses FROM users
+            ORDER BY wins DESC
+            LIMIT 10;
             """;
     public static final String GET_POSITION_SQL =
             """
-            SELECT chat_id from users
-            ORDER BY wins DESC;
+            SELECT position FROM
+            (
+                SELECT chat_id, ROW_NUMBER() OVER (ORDER BY wins DESC) AS position
+                FROM users
+            ) ranked
+            WHERE chat_id = ?;
             """;
     public static final String UPDATE_WINS_SQL = """
             UPDATE users
@@ -48,6 +53,6 @@ public final class Query
             SET user_name = ?
             WHERE chat_id = ?;
             """;
-    public static final String PULL_USER_BY_CHAT_ID_SQL = "SELECT * FROM users\nWHERE chat_id = ";
-    public static final String PULL_USER_BY_USER_NAME_SQL = "SELECT * FROM users\nWHERE user_name = '";
+    public static final String PULL_USER_BY_CHAT_ID_SQL = "SELECT * FROM users WHERE chat_id = ?;";
+    public static final String PULL_USER_BY_USER_NAME_SQL = "SELECT * FROM users WHERE user_name = ?;";
 }

@@ -3,18 +3,15 @@ package org.urfu.semyonovowa.dataBase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.Properties;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Тесты чистой арифметики {@link DataBaseHandler#getUserWinRate(int, int)}.
- * Метод не обращается к БД, поэтому обработчик создаётся с фиктивными параметрами.
+ * Метод не обращается к БД, поэтому пул соединений не нужен (передаём null).
  */
 class DataBaseHandlerWinRateTest
 {
-    private final DataBaseHandler handler =
-            new DataBaseHandler("driver", "url", new Properties());
+    private final DataBaseHandler handler = new DataBaseHandler(null);
 
     @Test
     @DisplayName("3 победы, 1 поражение — 75.00%")

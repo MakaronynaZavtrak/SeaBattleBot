@@ -3,12 +3,12 @@ package org.urfu.semyonovowa.dataBase;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.RankList;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
 
 /**
  * Реализует задачи обращения к базе данных
@@ -17,17 +17,9 @@ import java.util.Properties;
 public final class DataBaseHandler
 {
     /**
-     * Название драйвера
+     * Пул соединений с базой данных
      */
-    private final String forName;
-    /**
-     * Ссылка для соединения с базой данных
-     */
-    private final String url;
-    /**
-     * Данные для авторизации в базе данных
-     */
-    private final Properties properties;
+    private final DataSource dataSource;
     /**
      * Конейнер для хранения транзакций
      */
@@ -35,15 +27,11 @@ public final class DataBaseHandler
 
     /**
      * Конструктор
-     * @param forName название драйвера
-     * @param url ссылка на базу данных, располагаемую на удаленном сервере
-     * @param properties обёртка логина и пароля для подключения
+     * @param dataSource пул соединений с базой данных (HikariCP, конфигурируется Spring Boot)
      */
-    public DataBaseHandler(String forName, String url, Properties properties)
+    public DataBaseHandler(DataSource dataSource)
     {
-        this.forName = forName;
-        this.url = url;
-        this.properties = properties;
+        this.dataSource = dataSource;
         this.batchHolder = new ArrayList<>();
     }
 
@@ -54,8 +42,7 @@ public final class DataBaseHandler
      */
     public void insertUserIntoDB(MyUser user) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.INSERT_USER_INTO_DB_SQL))
         {
             preparedStatement.setLong(1, user.getChatId());
@@ -95,12 +82,11 @@ public final class DataBaseHandler
      */
     public String getTop10Users() throws ClassNotFoundException, SQLException {
         StringBuilder result = new StringBuilder();
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement())
         {
             ResultSet resultSet = statement.executeQuery(Query.GET_TOP_10_USERS_SQL);
-            for (int number = 1; resultSet.next() && number < 11; number++)
+            for (int number = 1; resultSet.next(); number++)
             {
                 String firstName = resultSet.getString(Column.FIRST_NAME);
                 int rankIdx = resultSet.getInt(Column.RANK_INDEX);
@@ -133,18 +119,18 @@ public final class DataBaseHandler
      */
     public int getSingleUserPosition(MyUser user) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        int index = 1;
-        try (Connection connection = DriverManager.getConnection(url, properties);
-             Statement statement = connection.createStatement())
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(Query.GET_POSITION_SQL))
         {
-            ResultSet resultSet = statement.executeQuery(Query.GET_POSITION_SQL);
-            for (; resultSet.next(); index++)
-                if (resultSet.getLong(Column.CHAT_ID) == user.getChatId())
-                    return index;
+            preparedStatement.setLong(1, user.getChatId());
+            try (ResultSet resultSet = preparedStatement.executeQuery())
+            {
+                if (resultSet.next())
+                    return resultSet.getInt(Column.POSITION);
+            }
         }
         catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
-        return index;
+        return 1;
     }
 
     /**
@@ -162,8 +148,7 @@ public final class DataBaseHandler
      */
     public void executeAddedQueries() throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties))
+        try (Connection connection = dataSource.getConnection())
         {
             connection.setAutoCommit(false);
             for (BatchContainer container : batchHolder)
@@ -189,8 +174,7 @@ public final class DataBaseHandler
      */
     public void freezeUser(MyUser user, Integer messageId) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.FREEZE_USER_SQL))
         {
             preparedStatement.setInt(1, messageId);
@@ -208,26 +192,35 @@ public final class DataBaseHandler
      */
     public MyUser pullUserFromDB(Object data)
     {
-        String sql = (data instanceof String)
-                ? Query.PULL_USER_BY_USER_NAME_SQL + data +  "';"
-                : Query.PULL_USER_BY_CHAT_ID_SQL + data + ";";
+        boolean byUserName = data instanceof String;
+        String sql = byUserName
+                ? Query.PULL_USER_BY_USER_NAME_SQL
+                : Query.PULL_USER_BY_CHAT_ID_SQL;
 
         MyUser pulledUser = null;
-        try (Connection connection = DriverManager.getConnection(url, properties);
-             Statement statement = connection.createStatement())
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(sql))
         {
-            ResultSet resultSet = statement.executeQuery(sql);
-            resultSet.next();
+            if (byUserName)
+                preparedStatement.setString(1, (String) data);
+            else
+                preparedStatement.setLong(1, (Long) data);
 
-            pulledUser = MyUser.builder()
-                    .chatId(resultSet.getLong(Column.CHAT_ID))
-                    .userName(resultSet.getString(Column.USER_NAME))
-                    .firstName(resultSet.getString(Column.FIRST_NAME))
-                    .currentRankIdx(resultSet.getInt(Column.RANK_INDEX))
-                    .experience(resultSet.getInt(Column.EXPERIENCE))
-                    .wins(resultSet.getInt(Column.WINS))
-                    .loses(resultSet.getInt(Column.LOSES))
-                    .lastMessageId(resultSet.getInt(Column.LAST_MESSAGE_ID)).build();
+            try (ResultSet resultSet = preparedStatement.executeQuery())
+            {
+                if (resultSet.next())
+                {
+                    pulledUser = MyUser.builder()
+                            .chatId(resultSet.getLong(Column.CHAT_ID))
+                            .userName(resultSet.getString(Column.USER_NAME))
+                            .firstName(resultSet.getString(Column.FIRST_NAME))
+                            .currentRankIdx(resultSet.getInt(Column.RANK_INDEX))
+                            .experience(resultSet.getInt(Column.EXPERIENCE))
+                            .wins(resultSet.getInt(Column.WINS))
+                            .loses(resultSet.getInt(Column.LOSES))
+                            .lastMessageId(resultSet.getInt(Column.LAST_MESSAGE_ID)).build();
+                }
+            }
         }
         catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
         return pulledUser;
@@ -241,8 +234,7 @@ public final class DataBaseHandler
      */
     public void updateUserName(MyUser user, String newUserName) throws ClassNotFoundException
     {
-        Class.forName(forName);
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(Query.UPDATE_USER_NAME_SQL))
         {
             preparedStatement.setString(1, newUserName);

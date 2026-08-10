@@ -1,17 +1,16 @@
 spring:
   application:
     name: sea-battle-bot
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
 
 bot:
   name: ${BOT_NAME}
   token: ${BOT_TOKEN}
   creator-chat-id: ${BOT_CREATOR_CHAT_ID}
-
-db:
-  for-name: ${DB_DRIVER:org.postgresql.Driver}
-  url: ${DB_URL}
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
 
 logging:
   level:

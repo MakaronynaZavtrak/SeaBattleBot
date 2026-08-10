@@ -8,7 +8,7 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import org.urfu.semyonovowa.bot.TelegramBot;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 
-import java.util.Properties;
+import javax.sql.DataSource;
 
 /**
  * Собирает и регистрирует бины приложения средствами Spring вместо самодельных билдеров.
@@ -19,15 +19,9 @@ import java.util.Properties;
 public class BotConfiguration
 {
     @Bean
-    public DataBaseHandler dataBaseHandler(DatabaseProperties databaseProperties)
+    public DataBaseHandler dataBaseHandler(DataSource dataSource)
     {
-        Properties credentials = new Properties();
-        credentials.setProperty("user", databaseProperties.user());
-        credentials.setProperty("password", databaseProperties.password());
-        return new DataBaseHandler(
-                databaseProperties.forName(),
-                databaseProperties.url(),
-                credentials);
+        return new DataBaseHandler(dataSource);
     }
 
     @Bean
