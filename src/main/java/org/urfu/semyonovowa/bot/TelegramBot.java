@@ -33,6 +33,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -1021,7 +1022,7 @@ public class TelegramBot extends TelegramLongPollingBot
             Map<Long, Integer> invitationTable = sessions.invitationMessages().get(whoIsInvited.getChatId());
             if (invitationTable == null)
             {
-                sessions.invitationMessages().put(whoIsInvited.getChatId(), new HashMap<>());
+                sessions.invitationMessages().put(whoIsInvited.getChatId(), new ConcurrentHashMap<>());
                 invitationTable = sessions.invitationMessages().get(whoIsInvited.getChatId());
             }
             invitationTable.put(whoInvites.getChatId(), sendedMessage.getMessageId());
