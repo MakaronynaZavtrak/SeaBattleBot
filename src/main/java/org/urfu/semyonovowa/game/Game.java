@@ -21,6 +21,7 @@ public class Game
     private final Map<Long, TelegramField> enemyFields;
     private final Map<Long, List<Ship>> ships;
     private final Map<Long, Boolean> firstMovement;
+    private final Map<Long, BitBoard> hits;
     public MyUser getCreator(){return this.creator;}
     public Map<Long, TelegramField> getOwnFields(){return this.ownFields;}
     public Map<Long, TelegramField> getEnemyFields(){return this.enemyFields;}
@@ -33,6 +34,7 @@ public class Game
         this.enemyFields = new HashMap<>();
         this.ships = new HashMap<>();
         this.firstMovement = new HashMap<>();
+        this.hits = new HashMap<>();
 
         BaseField baseFieldTemplate = new BaseField();
         fieldInitialize(creator, baseFieldTemplate);
@@ -49,6 +51,7 @@ public class Game
         enemyFields.put(user.getChatId(), userEnemyField);
 
         ships.put(user.getChatId(), getUserShips());
+        hits.put(user.getChatId(), BitBoard.empty());
     }
     private List<Ship> getUserShips()
     {
@@ -366,6 +369,30 @@ public class Game
                 board = board.set(Coord.parse(entry.getKey()));
         return board;
     }
+
+    /**
+     * Собирает битовую доску из набора координат-строк "y x".
+     */
+    private BitBoard bitBoardOf(Collection<String> coordinates)
+    {
+        BitBoard board = BitBoard.empty();
+        for (String coordinate : coordinates)
+            board = board.set(Coord.parse(coordinate));
+        return board;
+    }
+
+    /**
+     * Открывает на поле проигравшего непоражённые (выжившие) клетки кораблей победителя.
+     * Перенесено из TelegramField, чтобы пакет field не зависел от game.
+     */
+    public void revealSurvivedShips(TelegramField loserEnemyField, Long winnerChatId)
+    {
+        TelegramField winnerOwnField = ownFields.get(winnerChatId);
+        BitBoard winnerHits = hits.get(winnerChatId);
+        for (String cell : winnerOwnField.getShipsMap().keySet())
+            if (!winnerHits.test(Coord.parse(cell)))
+                loserEnemyField.editCage(cell, FieldEmoji.SHIP_SIGN);
+    }
     /**
      * Содержит в себе логическую обработку хода каждого игрока, который отображает на поле
      * @param attacker пользователь, который ходит
@@ -375,16 +402,16 @@ public class Game
     public MovingInformationForBothPlayers attack(MyUser attacker, String coordinates)
     {
         MyUser defender = (attacker.getChatId() == creator.getChatId()) ?  invitedUser : creator;
-        TelegramField enemyField = ownFields.get(defender.getChatId());
+        Long defenderId = defender.getChatId();
+        TelegramField enemyField = ownFields.get(defenderId);
         Ship currentShip = enemyField.getShipsMap().get(coordinates);
 
         if (currentShip != null)
         {
-            enemyField.decreaseAllLivesByOne();
-            currentShip.getDamagedCages().add(coordinates);
-            return (enemyField.getShipsMap().get(coordinates).getLives() - 1 > 0)
-                    ? treatShipHurt(attacker, coordinates, enemyField, currentShip)
-                    : treatShipKilling(attacker, enemyField, currentShip);
+            hits.put(defenderId, hits.get(defenderId).set(Coord.parse(coordinates)));
+            return hits.get(defenderId).contains(bitBoardOf(currentShip.getCoordinatesSet()))
+                    ? treatShipKilling(attacker, defenderId, enemyField, currentShip)
+                    : treatShipHurt(attacker, coordinates, enemyField);
         }
 
         return treatMissMovement(enemyField, coordinates, attacker);
@@ -396,22 +423,21 @@ public class Game
         enemyFields.get(attacker.getChatId()).editCage(coordinates, FieldEmoji.MISS_SIGN);
         return MovingInformationForBothPlayers.MISS_INFO;
     }
-    private MovingInformationForBothPlayers treatShipKilling(MyUser attacker, TelegramField enemyField,
-                                                             Ship currentShip)
+    private MovingInformationForBothPlayers treatShipKilling(MyUser attacker, Long defenderId,
+                                                             TelegramField enemyField, Ship currentShip)
     {
-        for (String coordinate : currentShip.getDamagedCages())
+        for (String coordinate : currentShip.getCoordinatesSet())
         {
             enemyField.editCage(coordinate, FieldEmoji.KILL_SIGN);
             enemyFields.get(attacker.getChatId()).editCage(coordinate, FieldEmoji.KILL_SIGN);
         }
-        return (enemyField.getAllLives() > 0)
-                ? MovingInformationForBothPlayers.KILL_INFO
-                : MovingInformationForBothPlayers.WIN_INFO;
+        return hits.get(defenderId).contains(bitBoardOf(enemyField.getShipsMap().keySet()))
+                ? MovingInformationForBothPlayers.WIN_INFO
+                : MovingInformationForBothPlayers.KILL_INFO;
     }
     private MovingInformationForBothPlayers treatShipHurt(MyUser attacker, String coordinates,
-                                                          TelegramField enemyField, Ship currentShip)
+                                                          TelegramField enemyField)
     {
-        currentShip.decreaseLivesByOne();
         enemyField.editCage(coordinates, FieldEmoji.HURT_SIGN);
         enemyFields.get(attacker.getChatId()).editCage(coordinates, FieldEmoji.HURT_SIGN);
         return MovingInformationForBothPlayers.HURT_INFO;

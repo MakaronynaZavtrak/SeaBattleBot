@@ -8,18 +8,14 @@ import java.util.*;
 public class TelegramField
 {
     private final Map<String, Ship> shipsMap;
-    private int allLives;
     private final InlineKeyboardMarkup keyboardMarkup;
     private final Set<String> usedCages;
     public TelegramField()
     {
         this.shipsMap = new HashMap<>();
-        this.allLives = 14;
         this.keyboardMarkup = new InlineKeyboardMarkup();
         this.usedCages = new HashSet<>();
     }
-    public int getAllLives(){return this.allLives;}
-    public void decreaseAllLivesByOne(){this.allLives--;}
     public Map<String, Ship> getShipsMap(){return this.shipsMap;}
     public InlineKeyboardMarkup getKeyboardMarkup(){return this.keyboardMarkup;}
     public Set<String> getUsedCages(){return this.usedCages;}
@@ -57,14 +53,5 @@ public class TelegramField
         List<List<InlineKeyboardButton>> buttons = keyboardMarkup.getKeyboard();
         buttons.get(y).get(x).setText(emoji);
         keyboardMarkup.setKeyboard(buttons);
-    }
-
-    public void showAllSurvivedEnemyShips(TelegramField winnerOwnField)
-    {
-        for (Map.Entry<String, Ship> entry : winnerOwnField.getShipsMap().entrySet())
-        {
-            if (!entry.getValue().getDamagedCages().contains(entry.getKey()))
-                editCage(entry.getKey(), FieldEmoji.SHIP_SIGN);
-        }
     }
 }

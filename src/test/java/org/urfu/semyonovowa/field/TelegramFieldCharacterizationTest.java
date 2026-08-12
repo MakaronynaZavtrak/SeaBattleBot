@@ -56,17 +56,6 @@ class TelegramFieldCharacterizationTest
     }
 
     @Test
-    @DisplayName("суммарное число жизней стартует с 14 и уменьшается")
-    void allLivesStartsAtFourteen()
-    {
-        TelegramField field = ownField();
-
-        assertThat(field.getAllLives()).isEqualTo(14);
-        field.decreaseAllLivesByOne();
-        assertThat(field.getAllLives()).isEqualTo(13);
-    }
-
-    @Test
     @DisplayName("editCage меняет эмодзи нужной клетки по координатам y x")
     void editCageUpdatesTargetCell()
     {

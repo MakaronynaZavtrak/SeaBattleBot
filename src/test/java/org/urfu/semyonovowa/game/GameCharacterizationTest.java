@@ -191,7 +191,6 @@ class GameCharacterizationTest
                 last = game.attack(attacker, cell);
 
             assertThat(last).isEqualTo(MovingInformationForBothPlayers.WIN_INFO);
-            assertThat(game.getOwnFields().get(defender.getChatId()).getAllLives()).isZero();
         }
     }
 }

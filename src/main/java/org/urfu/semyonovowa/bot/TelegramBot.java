@@ -348,9 +348,8 @@ public class TelegramBot extends TelegramLongPollingBot
             MyUser winner = userCache.getIfPresent(sessions.userPairs().get(user.getChatId()));
             if (winner != null)
             {
-                TelegramField winnerOwnField = game.getOwnFields().get(winner.getChatId());
                 TelegramField loserEnemyField = game.getEnemyFields().get(user.getChatId());
-                loserEnemyField.showAllSurvivedEnemyShips(winnerOwnField);
+                game.revealSurvivedShips(loserEnemyField, winner.getChatId());
                 editField(user, userStack.peek().getMessageId(), loserEnemyField);
             }
             user.increaseExperience(5);
