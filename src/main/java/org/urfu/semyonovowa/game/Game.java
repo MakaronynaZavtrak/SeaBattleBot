@@ -352,23 +352,19 @@ public class Game
      */
     public boolean isInCorrectPosition(Coord coord, Ship currentShip, Map<String, Ship> shipsMap)
     {
-        for (int i = -1; i < 2; i++)
-        {
-            for (int j = -1; j < 2; j++)
-            {
-                int neighbourRow = coord.row() + i;
-                int neighbourCol = coord.col() + j;
-                if (neighbourRow >= 0 && neighbourCol >= 0)
-                    if (nearOtherShip(new Coord(neighbourRow, neighbourCol), currentShip, shipsMap))
-                        return false;
-            }
-        }
-        return true;
+        return !BitBoard.blockAround(coord).intersects(occupancyOfOtherShips(currentShip, shipsMap));
     }
-    public boolean nearOtherShip(Coord coord, Ship currentShip, Map<String, Ship> shipsMap)
+
+    /**
+     * Собирает битовую доску клеток, занятых любыми кораблями, кроме currentShip.
+     */
+    private BitBoard occupancyOfOtherShips(Ship currentShip, Map<String, Ship> shipsMap)
     {
-        Ship someShip = shipsMap.get(coord.toString());
-        return someShip != null && !someShip.equals(currentShip);
+        BitBoard board = BitBoard.empty();
+        for (Map.Entry<String, Ship> entry : shipsMap.entrySet())
+            if (!entry.getValue().equals(currentShip))
+                board = board.set(Coord.parse(entry.getKey()));
+        return board;
     }
     /**
      * Содержит в себе логическую обработку хода каждого игрока, который отображает на поле
