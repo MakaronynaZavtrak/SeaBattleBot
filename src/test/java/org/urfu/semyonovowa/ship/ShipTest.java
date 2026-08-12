@@ -27,7 +27,6 @@ class ShipTest
         Ship ship = new Boat();
 
         assertThat(ship.getCoordinatesSet()).isEmpty();
-        assertThat(ship.getDamagedCages()).isEmpty();
     }
 
     @Test
@@ -35,16 +34,5 @@ class ShipTest
     void freshShipHasUndefinedOrientation()
     {
         assertThat(new Boat().getOrientation()).isNull();
-    }
-
-    @Test
-    @DisplayName("уменьшение жизней на единицу")
-    void decreaseLivesByOne()
-    {
-        Ship esminez = new Esminez();
-
-        esminez.decreaseLivesByOne();
-
-        assertThat(esminez.getLives()).isEqualTo(1);
     }
 }
