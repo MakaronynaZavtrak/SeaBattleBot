@@ -6,6 +6,8 @@ import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.ship.*;
 import org.urfu.semyonovowa.user.MyUser;
 
+import lombok.Getter;
+
 import java.util.*;
 
 import static java.lang.Math.*;
@@ -15,17 +17,13 @@ import static java.lang.Math.*;
  */
 public class Game
 {
-    private final MyUser creator;
+    @Getter private final MyUser creator;
     private final MyUser invitedUser;
-    private final Map<Long, TelegramField> ownFields;
-    private final Map<Long, TelegramField> enemyFields;
-    private final Map<Long, List<Ship>> ships;
-    private final Map<Long, Boolean> firstMovement;
+    @Getter private final Map<Long, TelegramField> ownFields;
+    @Getter private final Map<Long, TelegramField> enemyFields;
+    @Getter private final Map<Long, List<Ship>> ships;
+    @Getter private final Map<Long, Boolean> firstMovement;
     private final Map<Long, BitBoard> hits;
-    public MyUser getCreator(){return this.creator;}
-    public Map<Long, TelegramField> getOwnFields(){return this.ownFields;}
-    public Map<Long, TelegramField> getEnemyFields(){return this.enemyFields;}
-    public Map<Long, List<Ship>> getShips(){return this.ships;}
     public Game(MyUser creator, MyUser invitedUser)
     {
         this.creator = creator;
@@ -449,6 +447,4 @@ public class Game
         ownFields.put(currentUser.getChatId(), newField);
         ships.put(currentUser.getChatId(), getUserShips());
     }
-
-    public Map<Long, Boolean> getFirstMovement() {return firstMovement;}
 }

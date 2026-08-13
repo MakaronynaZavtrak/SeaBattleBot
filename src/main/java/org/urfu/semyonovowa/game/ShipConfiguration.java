@@ -1,12 +1,19 @@
 package org.urfu.semyonovowa.game;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
 public class ShipConfiguration
 {
     private int y;
     private int x;
     private int varUnitIdx;
     private int step;
+    @Setter
     private int amountWays;
+    @Getter(AccessLevel.NONE)
     private boolean configFlag;
     public ShipConfiguration()
     {
@@ -21,11 +28,5 @@ public class ShipConfiguration
         this.step = step;
         this.configFlag = true;
     }
-    public void setAmountWays(int amountWays) {this.amountWays = amountWays;}
     public boolean canBeConfigured(){return this.configFlag;}
-    public int getVarUnitIdx() {return varUnitIdx;}
-    public int getStep() {return step;}
-    public int getAmountWays() {return amountWays;}
-    public int getY() {return y;}
-    public int getX() {return x;}
 }
