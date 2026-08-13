@@ -1,6 +1,5 @@
 package org.urfu.semyonovowa.bot;
 
-import org.telegram.telegrambots.bots.DefaultAbsSender;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
@@ -8,20 +7,21 @@ import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageRe
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 /**
  * Тонкий шлюз к Telegram API — единственное место, где вызывается {@code execute(...)}.
  * Централизует обработку {@link TelegramApiException} и рапорт об ошибке создателю бота.
- * Состояния не хранит: только ввод-вывод.
+ * Состояния не хранит: только ввод-вывод. В v10 отправка идёт через {@link TelegramClient}.
  */
 public class TelegramGateway
 {
-    private final DefaultAbsSender sender;
+    private final TelegramClient telegramClient;
     private final Long creatorChatId;
 
-    public TelegramGateway(DefaultAbsSender sender, Long creatorChatId)
+    public TelegramGateway(TelegramClient telegramClient, Long creatorChatId)
     {
-        this.sender = sender;
+        this.telegramClient = telegramClient;
         this.creatorChatId = creatorChatId;
     }
 
@@ -33,7 +33,7 @@ public class TelegramGateway
     {
         try
         {
-            return sender.execute(message);
+            return telegramClient.execute(message);
         }
         catch (TelegramApiException e)
         {
@@ -50,7 +50,7 @@ public class TelegramGateway
     {
         try
         {
-            return sender.execute(photo);
+            return telegramClient.execute(photo);
         }
         catch (TelegramApiException e)
         {
@@ -63,7 +63,7 @@ public class TelegramGateway
     {
         try
         {
-            sender.execute(message);
+            telegramClient.execute(message);
         }
         catch (TelegramApiException e)
         {
@@ -75,7 +75,7 @@ public class TelegramGateway
     {
         try
         {
-            sender.execute(message);
+            telegramClient.execute(message);
         }
         catch (TelegramApiException e)
         {
@@ -87,7 +87,7 @@ public class TelegramGateway
     {
         try
         {
-            sender.execute(message);
+            telegramClient.execute(message);
         }
         catch (TelegramApiException e)
         {
@@ -103,7 +103,7 @@ public class TelegramGateway
                 .build();
         try
         {
-            sender.execute(error);
+            telegramClient.execute(error);
         }
         catch (TelegramApiException ignored)
         {
