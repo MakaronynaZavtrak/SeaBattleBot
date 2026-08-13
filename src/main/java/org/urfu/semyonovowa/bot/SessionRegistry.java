@@ -1,6 +1,6 @@
 package org.urfu.semyonovowa.bot;
 
-import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.urfu.semyonovowa.game.Game;
 import org.urfu.semyonovowa.user.MyUser;
 

@@ -14,7 +14,7 @@ import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
-import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -964,17 +964,12 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
     private void deleteLastMessage(MyUser user)
     {
         Stack<Message> currentMessageStack = sessions.messageStacks().get(user.getChatId());
-        DeleteMessage deleteMessage = new DeleteMessage();
-        deleteMessage.setChatId(user.getChatId());
-        if (currentMessageStack == null || currentMessageStack.isEmpty())
-        {
-            deleteMessage.setMessageId(user.getLastMessageId());
-        }
-        else
-        {
-            deleteMessage.setMessageId(currentMessageStack.pop().getMessageId());
-        }
-
+        Integer messageId = (currentMessageStack == null || currentMessageStack.isEmpty())
+                ? user.getLastMessageId()
+                : currentMessageStack.pop().getMessageId();
+        DeleteMessage deleteMessage = DeleteMessage.builder()
+                .chatId(user.getChatId())
+                .messageId(messageId).build();
         gateway.delete(deleteMessage);
     }
     /**
