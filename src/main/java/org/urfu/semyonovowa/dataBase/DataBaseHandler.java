@@ -1,5 +1,6 @@
 package org.urfu.semyonovowa.dataBase;
 
+import lombok.extern.slf4j.Slf4j;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.RankList;
 
@@ -14,6 +15,7 @@ import java.util.List;
  * Реализует задачи обращения к базе данных
  * @author Oleg Semenov
  */
+@Slf4j
 public final class DataBaseHandler
 {
     /**
@@ -54,7 +56,7 @@ public final class DataBaseHandler
             preparedStatement.setInt(7, user.getLoses());
             preparedStatement.executeUpdate();
         }
-        catch (SQLException e) { System.err.println("Ошибка при вставке данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при вставке данных", e); }
     }
 
     /**
@@ -107,7 +109,7 @@ public final class DataBaseHandler
                     .append("%\n");
             }
         }
-        catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при чтении данных", e); }
         return result.toString();
     }
 
@@ -129,7 +131,7 @@ public final class DataBaseHandler
                     return resultSet.getInt(Column.POSITION);
             }
         }
-        catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при чтении данных", e); }
         return 1;
     }
 
@@ -163,7 +165,7 @@ public final class DataBaseHandler
             connection.commit();
             batchHolder.clear();
         }
-        catch (SQLException e) { System.err.println("Ошибка при обновлении данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при обновлении данных", e); }
     }
 
     /**
@@ -181,7 +183,7 @@ public final class DataBaseHandler
             preparedStatement.setLong(2, user.getChatId());
             preparedStatement.executeUpdate();
         }
-        catch (SQLException e) { System.err.println("Ошибка при вставке данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при вставке данных", e); }
     }
 
     /**
@@ -222,7 +224,7 @@ public final class DataBaseHandler
                 }
             }
         }
-        catch (SQLException e) { System.err.println("Ошибка при чтении данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при чтении данных", e); }
         return pulledUser;
     }
 
@@ -241,6 +243,6 @@ public final class DataBaseHandler
             preparedStatement.setLong(2, user.getChatId());
             preparedStatement.executeUpdate();
         }
-        catch (SQLException e) { System.err.println("Ошибка при вставке данных: " + e.getMessage()); }
+        catch (SQLException e) { log.error("Ошибка при вставке данных", e); }
     }
 }
