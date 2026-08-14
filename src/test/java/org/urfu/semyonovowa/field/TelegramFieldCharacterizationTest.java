@@ -4,8 +4,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -27,7 +25,7 @@ class TelegramFieldCharacterizationTest
     @DisplayName("поле состоит из 8 рядов по 8 кнопок")
     void boardIsEightByEight()
     {
-        List<List<InlineKeyboardButton>> keyboard = ownField().getKeyboardMarkup().getKeyboard();
+        var keyboard = ownField().getKeyboardMarkup().getKeyboard();
 
         assertThat(keyboard).hasSize(8);
         assertThat(keyboard.get(0)).hasSize(8);

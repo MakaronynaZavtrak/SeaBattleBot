@@ -3,18 +3,23 @@ package org.urfu.semyonovowa.bot;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
+import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
+import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
+import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
-import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 import org.urfu.semyonovowa.dataBase.Query;
 import org.urfu.semyonovowa.field.TelegramField;
@@ -42,7 +47,7 @@ import java.util.stream.Collectors;
 /**
  * Класс, в котором изложена логика обработки взаимодействия с пользователями телеграмма
  */
-public class TelegramBot extends TelegramLongPollingBot
+public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer
 {
     private final SessionRegistry sessions;
     private final Cache<Long, MyUser> userCache;
@@ -53,8 +58,8 @@ public class TelegramBot extends TelegramLongPollingBot
     private final TelegramGateway gateway;
     public TelegramBot(String botUserName, String token, Long creatorChatId, DataBaseHandler dataBaseHandler)
     {
-        super(token);
-        this.gateway = new TelegramGateway(this, creatorChatId);
+        TelegramClient telegramClient = new OkHttpTelegramClient(token);
+        this.gateway = new TelegramGateway(telegramClient, creatorChatId);
         this.botUserName = botUserName;
         this.botToken = token;
         this.creatorChatId = creatorChatId;
@@ -152,7 +157,7 @@ public class TelegramBot extends TelegramLongPollingBot
      * @param update - полученные обновления
      */
     @Override
-    public void onUpdateReceived(Update update)
+    public void consume(Update update)
     {
         if (update.hasMessage() && update.getMessage().hasText())
         {
@@ -959,17 +964,12 @@ public class TelegramBot extends TelegramLongPollingBot
     private void deleteLastMessage(MyUser user)
     {
         Stack<Message> currentMessageStack = sessions.messageStacks().get(user.getChatId());
-        DeleteMessage deleteMessage = new DeleteMessage();
-        deleteMessage.setChatId(user.getChatId());
-        if (currentMessageStack == null || currentMessageStack.isEmpty())
-        {
-            deleteMessage.setMessageId(user.getLastMessageId());
-        }
-        else
-        {
-            deleteMessage.setMessageId(currentMessageStack.pop().getMessageId());
-        }
-
+        Integer messageId = (currentMessageStack == null || currentMessageStack.isEmpty())
+                ? user.getLastMessageId()
+                : currentMessageStack.pop().getMessageId();
+        DeleteMessage deleteMessage = DeleteMessage.builder()
+                .chatId(user.getChatId())
+                .messageId(messageId).build();
         gateway.delete(deleteMessage);
     }
     /**
@@ -1033,22 +1033,22 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     private InlineKeyboardMarkup getInviteKeyboard(MyUser user)
     {
-        List<InlineKeyboardButton> row1 = Collections.singletonList(InlineKeyboardButton.builder()
+        InlineKeyboardButton acceptButton = InlineKeyboardButton.builder()
                     .text("Принять приглашение✅")
-                    .callbackData("accept_Invite" + user.getChatId()).build());
+                    .callbackData("accept_Invite" + user.getChatId()).build();
 
-        List<InlineKeyboardButton> row2 = Collections.singletonList(InlineKeyboardButton.builder()
+        InlineKeyboardButton refuseButton = InlineKeyboardButton.builder()
                     .text("Отклонить❌")
-                    .callbackData("refuse_Invite" + user.getChatId()).build());
+                    .callbackData("refuse_Invite" + user.getChatId()).build();
 
         return InlineKeyboardMarkup.builder()
-                .keyboard(Arrays.asList(row1, row2)).build();
+                .keyboardRow(new InlineKeyboardRow(acceptButton))
+                .keyboardRow(new InlineKeyboardRow(refuseButton)).build();
     }
     /**
      * геттер для имени бота
      * @return имя бота
      */
-    @Override
     public String getBotUsername() { return this.botUserName; }
     /**
      * геттер для токена бота
@@ -1056,4 +1056,7 @@ public class TelegramBot extends TelegramLongPollingBot
      */
     @Override
     public String getBotToken(){ return this.botToken; }
+
+    @Override
+    public LongPollingUpdateConsumer getUpdatesConsumer() { return this; }
 }

@@ -2,18 +2,15 @@ package org.urfu.semyonovowa.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.telegram.telegrambots.meta.TelegramBotsApi;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import org.urfu.semyonovowa.bot.TelegramBot;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 
 import javax.sql.DataSource;
 
 /**
- * Собирает и регистрирует бины приложения средствами Spring вместо самодельных билдеров.
- * Регистрация в Telegram пока ручная (через {@link TelegramBotsApi}); на этапе 7
- * она уедет в официальный Spring Boot стартер telegrambots.
+ * Собирает бины приложения средствами Spring. Регистрацию бота в Telegram
+ * берёт на себя telegrambots-springboot-longpolling-starter: он сам находит
+ * бин типа SpringLongPollingBot и запускает long polling — ручной TelegramBotsApi больше не нужен.
  */
 @Configuration
 public class BotConfiguration
@@ -32,13 +29,5 @@ public class BotConfiguration
                 botProperties.token(),
                 botProperties.creatorChatId(),
                 dataBaseHandler);
-    }
-
-    @Bean
-    public TelegramBotsApi telegramBotsApi(TelegramBot telegramBot) throws TelegramApiException
-    {
-        TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-        telegramBotsApi.registerBot(telegramBot);
-        return telegramBotsApi;
     }
 }
