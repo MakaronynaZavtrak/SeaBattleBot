@@ -5,25 +5,25 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.urfu.semyonovowa.ship.Ship;
 
+import lombok.Getter;
+
 import java.util.*;
 public class TelegramField
 {
-    private final Map<String, Ship> shipsMap;
+    @Getter private final Map<String, Ship> shipsMap;
     private List<InlineKeyboardRow> keyboard;
-    private final Set<String> usedCages;
+    @Getter private final Set<String> usedCages;
     public TelegramField()
     {
         this.shipsMap = new HashMap<>();
         this.keyboard = new ArrayList<>();
         this.usedCages = new HashSet<>();
     }
-    public Map<String, Ship> getShipsMap(){return this.shipsMap;}
     /**
      * Строит свежую разметку из текущих рядов. В telegrambots 10.x объекты API
      * неизменяемы (builder-only), поэтому храним ряды сами и собираем markup по требованию.
      */
     public InlineKeyboardMarkup getKeyboardMarkup(){return InlineKeyboardMarkup.builder().keyboard(keyboard).build();}
-    public Set<String> getUsedCages(){return this.usedCages;}
     /**
      * Обобщенный метод установки поля
      * @param baseField - базовое изолированное от Telegram API поле

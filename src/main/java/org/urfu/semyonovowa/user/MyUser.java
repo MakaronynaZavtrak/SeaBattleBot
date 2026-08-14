@@ -1,18 +1,29 @@
 package org.urfu.semyonovowa.user;
+
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+
 /**
- * класс myUser предназначен для хранения необходимых данных о пользователе
- * для возможности более корректной обработки целостной логики программы
+ * Класс MyUser предназначен для хранения необходимых данных о пользователе.
+ * Геттеры и билдер генерирует Lombok. getChatId оставлен вручную, чтобы
+ * возвращать примитив long — иначе сравнения chatId через == сломались бы
+ * (сравнение ссылок вместо значений). @Builder висит на 8-арг конструкторе,
+ * чтобы сохранить дефолт state = IN_LOBBY, как в прежнем самописном билдере.
  */
-public class MyUser {
+@Getter
+public class MyUser
+{
     private final Long chatId;
-    private String userName;
+    @Setter private String userName;
     private final String firstName;
-    private State state;
+    @Setter private State state;
     private int wins;
     private int loses;
     private int experience;
     private int currentRankIdx;
     private final Integer lastMessageId;
+
     public MyUser(Long chatId, String userName, String firstName, State state)
     {
         this.chatId = chatId;
@@ -25,6 +36,8 @@ public class MyUser {
         this.currentRankIdx = 0;
         this.lastMessageId = null;
     }
+
+    @Builder
     public MyUser(Long chatId, String userName, String firstName, int wins, int loses, int experience,
                   int currentRankIdx, Integer lastMessageId)
     {
@@ -39,49 +52,10 @@ public class MyUser {
         this.state = State.IN_LOBBY;
     }
 
-    public static MyUserBuilder builder() { return new MyUserBuilder(); }
-
-    public long getChatId()
-    {
-        return chatId;
-    }
-
-    public String getUserName()
-    {
-        return userName;
-    }
-    public void setUserName(String userName){ this.userName = userName; }
-
-    public String getFirstName()
-    {
-        return firstName;
-    }
-
-    public State getState()
-    {
-        return state;
-    }
-
-    public void setState(State state)
-    {
-        this.state = state;
-    }
-
-    public int getWins() { return wins; }
+    public long getChatId() { return chatId; }
 
     public void incrementWins() { this.wins++; }
-
-    public int getLoses() { return loses; }
-
     public void incrementLoses() { this.loses++; }
-
-    public int getCurrentRankIdx(){ return this.currentRankIdx; }
-
-    public void incrementCurrentRankIdx(){ this.currentRankIdx++; }
-
-    public int getExperience() { return experience; }
-
-    public void increaseExperience(int addend) { this.experience += addend;}
-
-    public Integer getLastMessageId() { return lastMessageId; }
+    public void incrementCurrentRankIdx() { this.currentRankIdx++; }
+    public void increaseExperience(int addend) { this.experience += addend; }
 }
