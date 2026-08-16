@@ -2,6 +2,7 @@ package org.urfu.semyonovowa.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.urfu.semyonovowa.bot.TelegramBot;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
 
@@ -16,9 +17,9 @@ import javax.sql.DataSource;
 public class BotConfiguration
 {
     @Bean
-    public DataBaseHandler dataBaseHandler(DataSource dataSource)
+    public DataBaseHandler dataBaseHandler(DataSource dataSource, JdbcClient jdbcClient)
     {
-        return new DataBaseHandler(dataSource);
+        return new DataBaseHandler(dataSource, jdbcClient);
     }
 
     @Bean
