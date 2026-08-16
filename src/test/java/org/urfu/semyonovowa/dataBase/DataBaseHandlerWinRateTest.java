@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class DataBaseHandlerWinRateTest
 {
-    private final DataBaseHandler handler = new DataBaseHandler(null);
+    private final DataBaseHandler handler = new DataBaseHandler(null, null);
 
     @Test
     @DisplayName("3 победы, 1 поражение — 75.00%")
