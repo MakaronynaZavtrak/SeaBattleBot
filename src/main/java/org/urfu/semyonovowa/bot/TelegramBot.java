@@ -1,8 +1,8 @@
 package org.urfu.semyonovowa.bot;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalNotification;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
@@ -65,16 +65,16 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
         this.creatorChatId = creatorChatId;
         this.sessions = new SessionRegistry();
         this.dataBaseHandler = dataBaseHandler;
-        this.userCache = CacheBuilder.newBuilder()
+        this.userCache = Caffeine.newBuilder()
                 .expireAfterAccess(10, TimeUnit.MINUTES)
+                .executor(Runnable::run)
                 .removalListener(this::notificationHandler).build();
         ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
         executorService.scheduleAtFixedRate(userCache::cleanUp, 1, 1, TimeUnit.MINUTES);
     }
 
-    private void notificationHandler(RemovalNotification<Long, MyUser> notification)
+    private void notificationHandler(Long key, MyUser user, RemovalCause cause)
     {
-        MyUser user = notification.getValue();
         if (user == null)
             return;
         if (!user.getState().equals(State.IN_LOBBY))
