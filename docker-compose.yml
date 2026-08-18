@@ -1,0 +1,36 @@
+# Поднимает весь стек одной командой: docker compose up -d --build
+# Секреты берутся из .env (см. .env.example). Flyway на старте бота накатит
+# схему V1 на чистую базу автоматически.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-seabattle}
+      POSTGRES_USER: ${DB_USER:-seabattle}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD обязателен (задай в .env)}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-seabattle} -d ${POSTGRES_DB:-seabattle}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  bot:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-seabattle}
+      DB_USER: ${DB_USER:-seabattle}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD обязателен (задай в .env)}
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN обязателен (задай в .env)}
+      BOT_NAME: ${BOT_NAME:?BOT_NAME обязателен (задай в .env)}
+      BOT_CREATOR_CHAT_ID: ${BOT_CREATOR_CHAT_ID:?BOT_CREATOR_CHAT_ID обязателен (задай в .env)}
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
