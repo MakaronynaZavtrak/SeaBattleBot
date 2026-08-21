@@ -39,14 +39,20 @@ import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+
+import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Класс, в котором изложена логика обработки взаимодействия с пользователями телеграмма
  */
+@Slf4j
 public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer
 {
     private final SessionRegistry sessions;
@@ -56,6 +62,16 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
     private final Long creatorChatId;
     private final String botToken;
     private final TelegramGateway gateway;
+    /**
+     * Каждый апдейт обрабатывается на своём виртуальном потоке — пока один занят
+     * блокирующим I/O (Telegram/БД), остальные не ждут.
+     */
+    private final ExecutorService updateExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    /**
+     * Лок на чат: апдейты одного чата обрабатываются строго по очереди (быстрые
+     * клики одного игрока не гоняются), апдейты разных чатов — параллельно.
+     */
+    private final ConcurrentHashMap<Long, ReentrantLock> chatLocks = new ConcurrentHashMap<>();
     public TelegramBot(String botUserName, String token, Long creatorChatId, DataBaseHandler dataBaseHandler)
     {
         TelegramClient telegramClient = new OkHttpTelegramClient(token);
@@ -159,28 +175,56 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
     @Override
     public void consume(Update update)
     {
-        if (update.hasMessage() && update.getMessage().hasText())
+        updateExecutor.execute(() -> handleUpdate(update));
+    }
+
+    /**
+     * Обрабатывает апдейт на виртуальном потоке. Апдейты одного чата сериализуются
+     * локом чата; апдейты разных чатов идут параллельно. Мутацию боя двух игроков
+     * дополнительно защищает synchronized в {@link org.urfu.semyonovowa.game.Game#attack}.
+     * Исключения логируем — в задаче executor'а они иначе молча теряются.
+     */
+    private void handleUpdate(Update update)
+    {
+        Long chatId = extractChatId(update);
+        if (chatId == null)
+            return;
+
+        ReentrantLock lock = chatLocks.computeIfAbsent(chatId, key -> new ReentrantLock());
+        lock.lock();
+        try
         {
-            try
-            {
+            if (update.hasMessage() && update.getMessage().hasText())
                 handleMessage(update);
-            }
-            catch (SQLException | ClassNotFoundException e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-        else if (update.hasCallbackQuery())
-        {
-            try
-            {
+            else if (update.hasCallbackQuery())
                 handleCallbackQuery(update);
-            }
-            catch (SQLException | ClassNotFoundException e)
-            {
-                throw new RuntimeException(e);
-            }
         }
+        catch (Exception e)
+        {
+            log.error("Ошибка при обработке апдейта чата {}", chatId, e);
+        }
+        finally
+        {
+            lock.unlock();
+        }
+    }
+
+    private Long extractChatId(Update update)
+    {
+        if (update.hasMessage())
+            return update.getMessage().getChatId();
+        if (update.hasCallbackQuery())
+            return update.getCallbackQuery().getMessage().getChatId();
+        return null;
+    }
+
+    /**
+     * Корректно останавливает пул виртуальных потоков при остановке приложения.
+     */
+    @PreDestroy
+    public void shutdown()
+    {
+        updateExecutor.shutdown();
     }
     /**
      * метод для обработки всех нажатий на кнопки
@@ -617,7 +661,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                 case "my_stats" -> sendUserStatistics(currentUser);
                 case "top_10" -> sendTop10Users(currentUser);
                 case "rules" -> sendRules(currentUser);
-                case "prject_info" -> sendProjectInfo(currentUser);
+                case "project_info" -> sendProjectInfo(currentUser);
                 case "back_to_main" -> sendMainLobbyMenu(currentUser);
             }
         }

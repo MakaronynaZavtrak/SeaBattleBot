@@ -1,10 +1,12 @@
 # Поднимает весь стек одной командой: docker compose up -d --build
-# Секреты берутся из .env (см. .env.example). Flyway на старте бота накатит
+# Секреты берутся из .env (см. .env). Flyway на старте бота накатит
 # схему V1 на чистую базу автоматически.
 
 services:
   postgres:
     image: postgres:16-alpine
+    ports:
+      - "5433:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-seabattle}
       POSTGRES_USER: ${DB_USER:-seabattle}

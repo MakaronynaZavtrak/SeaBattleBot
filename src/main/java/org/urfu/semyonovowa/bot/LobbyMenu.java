@@ -58,7 +58,7 @@ public final class LobbyMenu
                         .callbackData("rules").build()))
                 .keyboardRow(new InlineKeyboardRow(InlineKeyboardButton.builder()
                         .text("О проекте⚙️")
-                        .callbackData("prject_info").build())).build();
+                        .callbackData("project_info").build())).build();
     }
     public static final InlineKeyboardMarkup mainLobbyMenuKeyBoard = getMainLobbyMenuKeyboard();
 }
