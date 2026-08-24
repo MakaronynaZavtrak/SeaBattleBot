@@ -157,13 +157,19 @@ class DataBaseHandlerIntegrationTest {
     /** Слепок партии с двумя игроками: у одного часть кораблей расставлена, у другого — стрельба началась. */
     private GameSnapshot sampleGame() {
         return new GameSnapshot(1L, 2L, List.of(
-                new GameSnapshot.PlayerState(1L,
-                        List.of(List.of("0 0", "0 1", "0 2", "0 3"), List.of("2 0", "2 1", "2 2"),
-                                List.of(), List.of(), List.of(), List.of(), List.of()),
-                        0L, "CRUISER_SETTING", true),
-                new GameSnapshot.PlayerState(2L,
-                        List.of(List.of("5 5"), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()),
-                        42L, "WAITING", false)));
+                new GameSnapshot.PlayerState(1L, List.of(
+                        new GameSnapshot.ShipState(List.of("0 0", "0 1", "0 2", "0 3"), "VERTICAL", 0),
+                        new GameSnapshot.ShipState(List.of("2 0", "2 1", "2 2"), "VERTICAL", 2),
+                        emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip()),
+                        0L, 6L, "CRUISER_SETTING", true),
+                new GameSnapshot.PlayerState(2L, List.of(
+                        new GameSnapshot.ShipState(List.of("5 5"), null, 5),
+                        emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip()),
+                        42L, 0L, "WAITING", false)));
+    }
+
+    private GameSnapshot.ShipState emptyShip() {
+        return new GameSnapshot.ShipState(List.of(), null, 0);
     }
 
     @Test

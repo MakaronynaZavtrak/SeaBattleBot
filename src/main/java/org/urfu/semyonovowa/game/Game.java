@@ -5,6 +5,8 @@ import org.urfu.semyonovowa.field.BaseField;
 import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.ship.*;
 import org.urfu.semyonovowa.user.MyUser;
+import org.urfu.semyonovowa.user.State;
+import org.urfu.semyonovowa.dataBase.GameSnapshot;
 
 import lombok.Getter;
 
@@ -446,5 +448,137 @@ public class Game
         newField.setTelegramOwnField(new BaseField());
         ownFields.put(currentUser.getChatId(), newField);
         ships.put(currentUser.getChatId(), getUserShips());
+    }
+
+    // ==================== Персистентность ====================
+
+    /**
+     * Снимает слепок логического состояния партии для сохранения в БД.
+     * Рендер полей не сохраняется — он детерминированно пересобирается в restore.
+     */
+    public GameSnapshot toSnapshot()
+    {
+        return new GameSnapshot(
+                creator.getChatId(),
+                invitedUser.getChatId(),
+                List.of(playerState(creator), playerState(invitedUser)));
+    }
+
+    private GameSnapshot.PlayerState playerState(MyUser player)
+    {
+        Long id = player.getChatId();
+        List<GameSnapshot.ShipState> shipStates = new ArrayList<>();
+        for (Ship ship : ships.get(id))
+        {
+            List<String> cells = new ArrayList<>(ship.getCoordinatesSet());
+            Collections.sort(cells); // детерминированный порядок вне зависимости от обхода HashSet
+            String orientation = (ship.getOrientation() == null) ? null : ship.getOrientation().name();
+            shipStates.add(new GameSnapshot.ShipState(cells, orientation, ship.getFixedVal()));
+        }
+        return new GameSnapshot.PlayerState(
+                id,
+                shipStates,
+                hits.get(id).bits(),
+                cellsToBits(enemyFields.get(id).getUsedCages()).bits(),
+                player.getState().name(),
+                firstMovement.getOrDefault(id, false));
+    }
+
+    /**
+     * Восстанавливает партию из слепка. Игроки берутся из кэша/БД по актуальным
+     * данным; их фаза (State) выставляется из слепка. Поля пересобираются полностью.
+     */
+    public static Game restore(GameSnapshot snapshot, MyUser creator, MyUser invitedUser)
+    {
+        Game game = new Game(creator, invitedUser);
+        for (GameSnapshot.PlayerState playerState : snapshot.players())
+        {
+            MyUser user = (playerState.chatId() == creator.getChatId()) ? creator : invitedUser;
+            game.restorePlayer(playerState, user);
+        }
+        game.renderRestoredBoards();
+        return game;
+    }
+
+    private void restorePlayer(GameSnapshot.PlayerState playerState, MyUser user)
+    {
+        Long id = playerState.chatId();
+        List<Ship> playerShips = ships.get(id);
+        List<GameSnapshot.ShipState> shipStates = playerState.ships();
+        TelegramField ownField = ownFields.get(id);
+        for (int i = 0; i < playerShips.size(); i++)
+        {
+            Ship ship = playerShips.get(i);
+            GameSnapshot.ShipState shipState = shipStates.get(i);
+            for (String cell : shipState.cells())
+            {
+                ship.getCoordinatesSet().add(cell);
+                ownField.getShipsMap().put(cell, ship);
+            }
+            ship.setOrientation(shipState.orientation() == null ? null : Orientation.valueOf(shipState.orientation()));
+            ship.setFixedVal(shipState.fixedVal());
+        }
+        hits.put(id, new BitBoard(playerState.hits()));
+        enemyFields.get(id).getUsedCages().addAll(bitsToCells(new BitBoard(playerState.usedCages())));
+        firstMovement.put(id, playerState.firstMove());
+        user.setState(State.valueOf(playerState.state()));
+    }
+
+    /**
+     * Пересобирает видимое состояние всех четырёх полей из логического состояния:
+     * свои корабли и входящие выстрелы соперника — на своём поле; свои выстрелы —
+     * на поле соперника (промах/ранение/потопление).
+     */
+    private void renderRestoredBoards()
+    {
+        Long a = creator.getChatId();
+        Long b = invitedUser.getChatId();
+        renderPlayerView(a, b);
+        renderPlayerView(b, a);
+    }
+
+    private void renderPlayerView(Long me, Long opponent)
+    {
+        TelegramField ownField = ownFields.get(me);
+        for (Ship ship : ships.get(me))
+            for (String cell : ship.getCoordinatesSet())
+                ownField.editCage(cell, FieldEmoji.SHIP_SIGN);
+        for (String cell : enemyFields.get(opponent).getUsedCages())
+            ownField.editCage(cell, shotMark(me, cell));
+
+        TelegramField myEnemyField = enemyFields.get(me);
+        for (String cell : enemyFields.get(me).getUsedCages())
+            myEnemyField.editCage(cell, shotMark(opponent, cell));
+    }
+
+    private String shotMark(Long defender, String cell)
+    {
+        Ship ship = ownFields.get(defender).getShipsMap().get(cell);
+        if (ship == null)
+            return FieldEmoji.MISS_SIGN;
+        return hits.get(defender).contains(cellsToBits(ship.getCoordinatesSet()))
+                ? FieldEmoji.KILL_SIGN
+                : FieldEmoji.HURT_SIGN;
+    }
+
+    private BitBoard cellsToBits(Set<String> cells)
+    {
+        BitBoard board = BitBoard.empty();
+        for (String cell : cells)
+            board = board.set(Coord.parse(cell));
+        return board;
+    }
+
+    private Set<String> bitsToCells(BitBoard board)
+    {
+        Set<String> cells = new HashSet<>();
+        for (int row = 0; row < Coord.BOARD_SIZE; row++)
+            for (int col = 0; col < Coord.BOARD_SIZE; col++)
+            {
+                Coord coord = new Coord(row, col);
+                if (board.test(coord))
+                    cells.add(coord.toString());
+            }
+        return cells;
     }
 }
