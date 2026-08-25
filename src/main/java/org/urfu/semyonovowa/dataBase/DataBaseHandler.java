@@ -1,5 +1,7 @@
 package org.urfu.semyonovowa.dataBase;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.RowMapper;
@@ -47,6 +49,9 @@ public final class DataBaseHandler
             .wins(resultSet.getInt(Column.WINS))
             .loses(resultSet.getInt(Column.LOSES))
             .lastMessageId(resultSet.getInt(Column.LAST_MESSAGE_ID)).build();
+
+    /** Сериализатор снапшотов игр в JSON. ObjectMapper потокобезопасен. */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
      * Пул соединений с базой данных. Используется напрямую только для
@@ -268,5 +273,62 @@ public final class DataBaseHandler
                     .update();
         }
         catch (DataAccessException e) { log.error("Ошибка при вставке данных", e); }
+    }
+
+    /**
+     * Сохраняет (или обновляет) активную партию. Ключ — chat_id создателя.
+     * @param snapshot слепок логического состояния партии
+     */
+    public void saveGame(GameSnapshot snapshot)
+    {
+        try
+        {
+            String json = OBJECT_MAPPER.writeValueAsString(snapshot);
+            jdbcClient.sql(Query.UPSERT_GAME_SQL)
+                    .param(1, snapshot.creatorChatId())
+                    .param(2, snapshot.creatorChatId())
+                    .param(3, snapshot.opponentChatId())
+                    .param(4, json)
+                    .update();
+        }
+        catch (JsonProcessingException e) { log.error("Не удалось сериализовать партию {}", snapshot.creatorChatId(), e); }
+        catch (DataAccessException e) { log.error("Ошибка при сохранении партии", e); }
+    }
+
+    /**
+     * Загружает все активные партии (для восстановления при старте приложения).
+     * @return список слепков; повреждённые записи пропускаются с логом
+     */
+    public List<GameSnapshot> loadActiveGames()
+    {
+        try
+        {
+            List<String> snapshots = jdbcClient.sql(Query.SELECT_ALL_GAMES_SQL).query(String.class).list();
+            List<GameSnapshot> games = new ArrayList<>();
+            for (String json : snapshots)
+            {
+                try { games.add(OBJECT_MAPPER.readValue(json, GameSnapshot.class)); }
+                catch (JsonProcessingException e) { log.error("Не удалось разобрать снапшот партии", e); }
+            }
+            return games;
+        }
+        catch (DataAccessException e)
+        {
+            log.error("Ошибка при загрузке партий", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Удаляет партию (например, по завершении игры).
+     * @param creatorChatId chat_id создателя (game_id)
+     */
+    public void deleteGame(long creatorChatId)
+    {
+        try
+        {
+            jdbcClient.sql(Query.DELETE_GAME_SQL).param(1, creatorChatId).update();
+        }
+        catch (DataAccessException e) { log.error("Ошибка при удалении партии", e); }
     }
 }

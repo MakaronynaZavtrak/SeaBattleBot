@@ -13,6 +13,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.urfu.semyonovowa.user.MyUser;
 import org.urfu.semyonovowa.user.State;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -27,8 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code mvn test} без Docker останется зелёным, а в CI (там Docker есть) отработает.
  */
 @Testcontainers(disabledWithoutDocker = true)
-class DataBaseHandlerIntegrationTest
-{
+class DataBaseHandlerIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
@@ -36,8 +37,7 @@ class DataBaseHandlerIntegrationTest
     static JdbcClient jdbcClient;
 
     @BeforeAll
-    static void setUp()
-    {
+    static void setUp() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource();
         dataSource.setUrl(POSTGRES.getJdbcUrl());
         dataSource.setUsername(POSTGRES.getUsername());
@@ -51,14 +51,13 @@ class DataBaseHandlerIntegrationTest
     }
 
     @BeforeEach
-    void cleanTable()
-    {
+    void cleanTable() {
+        jdbcClient.sql("DELETE FROM games").update();
         jdbcClient.sql("DELETE FROM users").update();
     }
 
     /** Создаёт пользователя с заданной статистикой через билдер (для сценариев с wins). */
-    private MyUser userWithWins(long chatId, String userName, String firstName, int wins)
-    {
+    private MyUser userWithWins(long chatId, String userName, String firstName, int wins) {
         return MyUser.builder()
                 .chatId(chatId).userName(userName).firstName(firstName)
                 .wins(wins).loses(0).experience(0).currentRankIdx(0).lastMessageId(0).build();
@@ -66,8 +65,7 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("вставка и чтение по chat_id возвращают того же пользователя")
-    void insertAndPullByChatId() throws Exception
-    {
+    void insertAndPullByChatId() throws Exception {
         handler.insertUserIntoDB(new MyUser(1L, "alice", "Alice", State.IN_LOBBY));
 
         MyUser pulled = handler.pullUserFromDB(1L);
@@ -82,8 +80,7 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("чтение по user_name находит пользователя")
-    void pullByUserName() throws Exception
-    {
+    void pullByUserName() throws Exception {
         handler.insertUserIntoDB(new MyUser(2L, "bob", "Bob", State.IN_LOBBY));
 
         MyUser pulled = handler.pullUserFromDB("bob");
@@ -95,16 +92,14 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("чтение отсутствующего пользователя возвращает null")
-    void pullAbsentReturnsNull()
-    {
+    void pullAbsentReturnsNull() {
         assertThat(handler.pullUserFromDB(999L)).isNull();
         assertThat(handler.pullUserFromDB("nobody")).isNull();
     }
 
     @Test
     @DisplayName("обновление user_name сохраняется")
-    void updateUserNamePersists() throws Exception
-    {
+    void updateUserNamePersists() throws Exception {
         MyUser user = new MyUser(3L, "old_name", "Carol", State.IN_LOBBY);
         handler.insertUserIntoDB(user);
 
@@ -115,8 +110,7 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("freezeUser сохраняет last_message_id")
-    void freezeUserPersistsLastMessageId() throws Exception
-    {
+    void freezeUserPersistsLastMessageId() throws Exception {
         MyUser user = new MyUser(4L, "dave", "Dave", State.IN_LOBBY);
         handler.insertUserIntoDB(user);
 
@@ -127,8 +121,7 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("позиция считается по убыванию побед")
-    void positionByWinsDesc() throws Exception
-    {
+    void positionByWinsDesc() throws Exception {
         handler.insertUserIntoDB(userWithWins(10L, "a", "A", 10));
         handler.insertUserIntoDB(userWithWins(20L, "b", "B", 5));
         handler.insertUserIntoDB(userWithWins(30L, "c", "C", 20));
@@ -140,8 +133,7 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("топ-10 упорядочен по убыванию побед")
-    void topTenOrderedByWins() throws Exception
-    {
+    void topTenOrderedByWins() throws Exception {
         handler.insertUserIntoDB(userWithWins(10L, "a", "Anna", 3));
         handler.insertUserIntoDB(userWithWins(20L, "b", "Boris", 15));
 
@@ -153,13 +145,61 @@ class DataBaseHandlerIntegrationTest
 
     @Test
     @DisplayName("накопленные транзакции применяются в executeAddedQueries")
-    void batchedUpdatesApply() throws Exception
-    {
+    void batchedUpdatesApply() throws Exception {
         handler.insertUserIntoDB(new MyUser(5L, "erin", "Erin", State.IN_LOBBY));
 
         handler.addBatch(Query.UPDATE_WINS_SQL, 5L, 7);
         handler.executeAddedQueries();
 
         assertThat(handler.pullUserFromDB(5L).getWins()).isEqualTo(7);
+    }
+
+    /** Слепок партии с двумя игроками: у одного часть кораблей расставлена, у другого — стрельба началась. */
+    private GameSnapshot sampleGame() {
+        return new GameSnapshot(1L, 2L, List.of(
+                new GameSnapshot.PlayerState(1L, List.of(
+                        new GameSnapshot.ShipState(List.of("0 0", "0 1", "0 2", "0 3"), "VERTICAL", 0),
+                        new GameSnapshot.ShipState(List.of("2 0", "2 1", "2 2"), "VERTICAL", 2),
+                        emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip()),
+                        0L, 6L, "CRUISER_SETTING", true),
+                new GameSnapshot.PlayerState(2L, List.of(
+                        new GameSnapshot.ShipState(List.of("5 5"), null, 5),
+                        emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip(), emptyShip()),
+                        42L, 0L, "WAITING", false)));
+    }
+
+    private GameSnapshot.ShipState emptyShip() {
+        return new GameSnapshot.ShipState(List.of(), null, 0);
+    }
+
+    @Test
+    @DisplayName("снапшот партии сохраняется и читается без потерь (round-trip)")
+    void gameSnapshotRoundTrips() {
+        GameSnapshot game = sampleGame();
+
+        handler.saveGame(game);
+        List<GameSnapshot> loaded = handler.loadActiveGames();
+
+        assertThat(loaded).hasSize(1);
+        assertThat(loaded.get(0)).isEqualTo(game);
+    }
+
+    @Test
+    @DisplayName("повторное сохранение той же партии обновляет, а не дублирует")
+    void savingSameGameUpserts() {
+        handler.saveGame(sampleGame());
+        handler.saveGame(sampleGame());
+
+        assertThat(handler.loadActiveGames()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("deleteGame удаляет партию")
+    void deleteGameRemovesIt() {
+        handler.saveGame(sampleGame());
+
+        handler.deleteGame(1L);
+
+        assertThat(handler.loadActiveGames()).isEmpty();
     }
 }
