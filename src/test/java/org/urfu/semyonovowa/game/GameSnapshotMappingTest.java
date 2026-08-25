@@ -57,4 +57,55 @@ class GameSnapshotMappingTest
 
         assertThat(again).isEqualTo(original);
     }
+
+    /**
+     * Ключевой для 17c инвариант: живой код различает «игрок уже ходил» по НАЛИЧИЮ
+     * ключа в firstMovement (flag != null), а не по значению. Значит restore обязан
+     * НЕ класть ключ для ещё не ходившего игрока (firstMove=false) — иначе после
+     * перезапуска его первый ход уйдёт по ветке «не первого хода» и стек сообщений
+     * разъедется.
+     */
+    @Test
+    @DisplayName("restore: firstMove=false -> ключа в firstMovement нет (остаётся null)")
+    void restoreKeepsFirstMovementAbsentForPlayerThatHasNotMoved()
+    {
+        MyUser creator = new MyUser(1L, "alice", "Alice", State.IN_LOBBY);
+        MyUser invited = new MyUser(2L, "bob", "Bob", State.IN_LOBBY);
+
+        GameSnapshot snapshot = new GameSnapshot(1L, 2L, List.of(
+                new GameSnapshot.PlayerState(1L, sevenEmptyShips(), 0L, 0L, "MOVING", true),
+                new GameSnapshot.PlayerState(2L, sevenEmptyShips(), 0L, 0L, "WAITING", false)));
+
+        Game restored = Game.restore(snapshot, creator, invited);
+
+        // ходивший игрок — ключ есть и равен true; не ходивший — ключа нет (get вернёт null)
+        assertThat(restored.getFirstMovement()).containsEntry(1L, true);
+        assertThat(restored.getFirstMovement().get(2L)).isNull();
+    }
+
+    /**
+     * Обратная сторона инварианта: то, что для не ходившего игрока ключ отсутствует,
+     * не ломает round-trip — toSnapshot берёт getOrDefault(id, false) и снова выдаёт false.
+     */
+    @Test
+    @DisplayName("restore -> toSnapshot: отсутствие ключа снова даёт firstMove=false")
+    void absentFirstMovementRoundTripsBackToFalse()
+    {
+        MyUser creator = new MyUser(1L, "alice", "Alice", State.IN_LOBBY);
+        MyUser invited = new MyUser(2L, "bob", "Bob", State.IN_LOBBY);
+
+        GameSnapshot snapshot = new GameSnapshot(1L, 2L, List.of(
+                new GameSnapshot.PlayerState(1L, sevenEmptyShips(), 0L, 0L, "MOVING", true),
+                new GameSnapshot.PlayerState(2L, sevenEmptyShips(), 0L, 0L, "WAITING", false)));
+
+        GameSnapshot again = Game.restore(snapshot, creator, invited).toSnapshot();
+
+        assertThat(again).isEqualTo(snapshot);
+    }
+
+    private List<GameSnapshot.ShipState> sevenEmptyShips()
+    {
+        return List.of(emptyShip(), emptyShip(), emptyShip(), emptyShip(),
+                emptyShip(), emptyShip(), emptyShip());
+    }
 }

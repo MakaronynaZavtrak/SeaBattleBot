@@ -21,6 +21,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMa
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.urfu.semyonovowa.dataBase.DataBaseHandler;
+import org.urfu.semyonovowa.dataBase.GameSnapshot;
 import org.urfu.semyonovowa.dataBase.Query;
 import org.urfu.semyonovowa.field.TelegramField;
 import org.urfu.semyonovowa.game.Game;
@@ -46,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
@@ -87,6 +89,141 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                 .removalListener(this::notificationHandler).build();
         ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
         executorService.scheduleAtFixedRate(userCache::cleanUp, 1, 1, TimeUnit.MINUTES);
+    }
+
+    // ==================== Восстановление партий при старте (17c) ====================
+
+    /**
+     * При старте приложения поднимает из БД все активные партии. Каждая партия
+     * восстанавливается изолированно: сбой одной записи логируется и не мешает ни
+     * остальным, ни запуску бота. Метод отрабатывает на этапе инициализации бина —
+     * до того как стартер telegrambots начинает разбирать апдейты, поэтому гонок с
+     * обработкой ходов здесь нет.
+     */
+    @PostConstruct
+    public void restoreActiveGames()
+    {
+        List<GameSnapshot> snapshots;
+        try { snapshots = dataBaseHandler.loadActiveGames(); }
+        catch (Exception e) { log.error("Не удалось загрузить активные партии при старте", e); return; }
+
+        int restored = 0;
+        for (GameSnapshot snapshot : snapshots)
+        {
+            try { if (restoreOneGame(snapshot)) restored++; }
+            catch (Exception e) { log.error("Не удалось восстановить партию {}", snapshot.creatorChatId(), e); }
+        }
+        if (!snapshots.isEmpty())
+            log.info("Восстановлено активных партий: {} из {}", restored, snapshots.size());
+    }
+
+    /**
+     * Восстанавливает одну партию: тянет обоих игроков из БД, пересобирает игру,
+     * кладёт её в реестр сессий для обоих чатов и переотправляет доски (message_id
+     * после перезапуска протухли). Некорректные/завершённые партии удаляются из БД.
+     *
+     * @return true, если партия действительно восстановлена в память
+     */
+    private boolean restoreOneGame(GameSnapshot snapshot)
+    {
+        long creatorId = snapshot.creatorChatId();
+        long opponentId = snapshot.opponentChatId();
+
+        MyUser creator = dataBaseHandler.pullUserFromDB(creatorId);
+        MyUser invited = dataBaseHandler.pullUserFromDB(opponentId);
+        if (creator == null || invited == null)
+        {
+            log.warn("Партия {} не восстановлена: игрок отсутствует в БД — удаляю запись", creatorId);
+            dataBaseHandler.deleteGame(creatorId);
+            return false;
+        }
+
+        Game game = Game.restore(snapshot, creator, invited);
+
+        if (isNotInGame(creator.getState()) || isNotInGame(invited.getState()))
+        {
+            log.warn("Партия {} в нерабочей фазе ({}/{}) — удаляю запись",
+                    creatorId, creator.getState(), invited.getState());
+            dataBaseHandler.deleteGame(creatorId);
+            return false;
+        }
+
+        userCache.put(creatorId, creator);
+        userCache.put(opponentId, invited);
+
+        sessions.games().put(creatorId, game);
+        sessions.games().put(opponentId, game);
+        sessions.userPairs().put(creatorId, opponentId);
+        sessions.userPairs().put(opponentId, creatorId);
+
+        resendBoards(creator, game);
+        resendBoards(invited, game);
+        return true;
+    }
+
+    /**
+     * @return true, если в такой фазе активной партии быть не может (лобби/финал) —
+     * значит запись в БД мусорная и подлежит удалению.
+     */
+    private boolean isNotInGame(State state)
+    {
+        return switch (state)
+        {
+            case IN_LOBBY, FINISHED_GAME, WANT_TO_REPLAY -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * Переотправляет игроку сообщения так, чтобы стек сообщений точно совпал с тем,
+     * какой ожидают обработчики в его текущей фазе (иначе последующие pop/peek/edit
+     * разъедутся):
+     *  - расстановка кораблей / готов к игре — одно сообщение с полем;
+     *  - бой — [своё поле, поле врага, (событие,) чей ход]: глубина 3 или 4 в
+     *    зависимости от того, ходил ли уже игрок (тот же инвариант, что у exit-счётчиков).
+     */
+    private void resendBoards(MyUser user, Game game)
+    {
+        Long id = user.getChatId();
+        State state = user.getState();
+
+        if (state.isPlacingShip())
+        {
+            sendField(user, game.getOwnFields().get(id), settingCaption(state));
+            return;
+        }
+        if (state.equals(State.READY_TO_PLAY))
+        {
+            sendField(user, game.getOwnFields().get(id), "Подожди, твой противник еще расставляет корабли");
+            return;
+        }
+
+        // MOVING / WAITING — фаза боя
+        sendMessageWithNoSave(id, "\uD83D\uDD04 Бот перезапускался — восстанавливаю вашу партию.");
+        sendField(user, game.getOwnFields().get(id), "Твое поле:");
+        sendField(user, game.getEnemyFields().get(id), "Поле твоего противника:");
+
+        boolean alreadyMoved = game.getFirstMovement().get(id) != null;
+        if (alreadyMoved)
+            sendMessage(user, "Партия восстановлена после перезапуска");
+        sendMessage(user, state.equals(State.MOVING) ? "Сейчас ходишь ты" : "Сейчас ходит противник");
+    }
+
+    private String settingCaption(State state)
+    {
+        return switch (state)
+        {
+            case LINCORE_SETTING -> TIP.LINCORE;
+            case CRUISER_SETTING -> TIP.CRUISER;
+            case ESMINEZ_1_SETTING, ESMINEZ_2_SETTING -> TIP.ESMINEZS;
+            default -> TIP.BOATS;
+        };
+    }
+
+    /** Сохраняет (upsert) текущее логическое состояние партии в БД. */
+    private void persistGame(Game game)
+    {
+        dataBaseHandler.saveGame(game.toSnapshot());
     }
 
     private void notificationHandler(Long key, MyUser user, RemovalCause cause)
@@ -162,6 +299,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
         Game game = sessions.games().get(user.getChatId());
         if (game != null)
         {
+            dataBaseHandler.deleteGame(game.getCreator().getChatId());
             sessions.games().remove(user.getChatId());
             if (pairUserChatId != null)
                 sessions.games().remove(pairUserChatId);
@@ -297,6 +435,9 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
 
     private void commonLeaveGame(MyUser currentUser, int times, String textAfter)
     {
+        Game game = sessions.games().get(currentUser.getChatId());
+        if (game != null)
+            dataBaseHandler.deleteGame(game.getCreator().getChatId());
         Long pairUserChatId = sessions.userPairs().get(currentUser.getChatId());
         MyUser pairUser = userCache.getIfPresent(pairUserChatId);
         sessions.userPairs().remove(pairUserChatId);
@@ -341,6 +482,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
             Game newGame = new Game(pairUser, currentUser);
             prepareForReplay(currentUser, newGame);
             prepareForReplay(pairUser, newGame);
+            persistGame(newGame);
         }
     }
     private void prepareForReplay(MyUser user, Game game)
@@ -373,12 +515,14 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
             treatNotWinMovement(currentUser, currentGame, information.currentUserInformation);
             if (pairUser != null)
                 treatNotWinMovement(pairUser, currentGame, information.pairUserInformation);
+            persistGame(currentGame);
         }
         else
         {
             treatWinMovement(currentUser, currentGame, information.currentUserInformation);
             treatWinMovement(pairUser, currentGame, information.pairUserInformation);
             dataBaseHandler.executeAddedQueries();
+            dataBaseHandler.deleteGame(currentGame.getCreator().getChatId());
         }
     }
     /**
@@ -576,6 +720,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                     sendFieldsAndDefineTurn(currentUser, currentGame);
                     sendFieldsAndDefineTurn(pairUser, currentGame);
                 }
+                persistGame(currentGame);
             }
         }
     }
@@ -616,6 +761,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
                 currentUser.setState(nextState);
                 if (tip != null)
                     editMessage(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek(), tip);
+                persistGame(currentGame);
             }
             editField(currentUser, sessions.messageStacks().get(currentUser.getChatId()).peek().getMessageId(),
                     currentGame.getOwnFields().get(currentUser.getChatId()));
@@ -756,6 +902,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
         deleteLastMessage(whoAccepts);
         prepareForShipSetting(whoInvites, whoAccepts, newGame);
         prepareForShipSetting(whoAccepts, whoInvites, newGame);
+        persistGame(newGame);
     }
     private void prepareForShipSetting(MyUser user1, MyUser user2, Game game)
     {
@@ -851,6 +998,7 @@ public class TelegramBot implements SpringLongPollingBot, LongPollingSingleThrea
         currentGame.resetOwnField(currentUser);
         currentUser.setState(State.LINCORE_SETTING);
         sendField(currentUser, currentGame.getOwnFields().get(currentUser.getChatId()), TIP.LINCORE);
+        persistGame(currentGame);
     }
     private void endGameMessageHandler(MyUser currentUser, Update update)
     {

@@ -520,7 +520,10 @@ public class Game
         }
         hits.put(id, new BitBoard(playerState.hits()));
         enemyFields.get(id).getUsedCages().addAll(bitsToCells(new BitBoard(playerState.usedCages())));
-        firstMovement.put(id, playerState.firstMove());
+        // Наличие ключа = игрок уже ходил (живой код различает фазу по null,
+        // а не по значению). Кладём только true, чтобы "ещё не ходил" остался null.
+        if (playerState.firstMove())
+            firstMovement.put(id, true);
         user.setState(State.valueOf(playerState.state()));
     }
 
