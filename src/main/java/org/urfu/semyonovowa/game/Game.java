@@ -88,7 +88,8 @@ public class Game
 
     private boolean setBoatCage(Coord coord, TelegramField field, Ship ship)
     {
-        if (!isInCorrectPosition(coord, ship, field.getShipsMap()))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
             return false;
 
         treatSingleCage(coord, field, ship);
@@ -101,9 +102,9 @@ public class Game
      * клетку. Единственный способ — раскладываем корабль целиком; ни одного — отказ;
      * несколько — ставим одну клетку и ждём уточнения направления следующим кликом.
      */
-    private boolean placeFirstCell(Coord coord, TelegramField field, Ship ship)
+    private boolean placeFirstCell(Coord coord, TelegramField field, Ship ship, BitBoard others)
     {
-        ShipConfiguration configuration = findWaysToConfigureTheShip(coord, ship, field.getShipsMap());
+        ShipConfiguration configuration = findWaysToConfigureTheShip(coord, ship, others);
         return switch (configuration.amountWays())
         {
             case 1 -> { configureTheShip(configuration, field, ship); yield true; }
@@ -170,10 +171,11 @@ public class Game
 
     private boolean setEsminezCage(Coord coord, TelegramField field, Ship ship)
     {
-        if (!isInCorrectPosition(coord, ship, field.getShipsMap()))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
             return false;
         if (ship.getCoordinatesSet().isEmpty())
-            return placeFirstCell(coord, field, ship);
+            return placeFirstCell(coord, field, ship, others);
 
         PlacementAxis axis = resolveAxis(coord, ship);
         if (axis == null)
@@ -187,11 +189,11 @@ public class Game
 
     private boolean setCruiserCage(Coord coord, TelegramField field, Ship ship)
     {
-        Map<String, Ship> shipsMap = field.getShipsMap();
-        if (!isInCorrectPosition(coord, ship, shipsMap))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
             return false;
         if (ship.getCoordinatesSet().isEmpty())
-            return placeFirstCell(coord, field, ship);
+            return placeFirstCell(coord, field, ship, others);
 
         PlacementAxis axis = resolveAxis(coord, ship);
         if (axis == null)
@@ -215,15 +217,15 @@ public class Game
         Coord beforeMin = Coord.of(minVariable - 1, fixedUnit, variableAxis);
         Coord afterMax = Coord.of(maxVariable + 1, fixedUnit, variableAxis);
 
-        if ((minVariable == 0 || !isInCorrectPosition(beforeMin, ship, shipsMap))
-                && isInCorrectPosition(afterMax, ship, shipsMap)
+        if ((minVariable == 0 || !isInCorrectPosition(beforeMin, others))
+                && isInCorrectPosition(afterMax, others)
                 && afterMax.isOnBoard())
         {
             fillShipCages(minVariable, fixedUnit, variableAxis, 1, ship, field);
             return true;
         }
-        else if ((maxVariable == Coord.BOARD_SIZE - 1 || !isInCorrectPosition(afterMax, ship, shipsMap))
-                && isInCorrectPosition(beforeMin, ship, shipsMap)
+        else if ((maxVariable == Coord.BOARD_SIZE - 1 || !isInCorrectPosition(afterMax, others))
+                && isInCorrectPosition(beforeMin, others)
                 && beforeMin.isOnBoard())
         {
             fillShipCages(maxVariable, fixedUnit, variableAxis, -1, ship, field);
@@ -232,7 +234,7 @@ public class Game
 
         for (int i = minVariable; i < lives + minVariable; i++)
         {
-            if (!isInCorrectPosition(Coord.of(i, fixedUnit, variableAxis), ship, shipsMap))
+            if (!isInCorrectPosition(Coord.of(i, fixedUnit, variableAxis), others))
                 return false;
         }
         treatSingleCage(coord, field, ship);
@@ -295,7 +297,7 @@ public class Game
         return Optional.empty();
     }
 
-    public void configureTheShip(ShipConfiguration configuration, TelegramField field, Ship ship)
+    private void configureTheShip(ShipConfiguration configuration, TelegramField field, Ship ship)
     {
         Coord start = new Coord(configuration.startRow(), configuration.startCol());
         int variableAxis = configuration.variableAxis();
@@ -321,7 +323,7 @@ public class Game
             treatSingleCage(Coord.of(minVariableUnit + i, fixed, variableAxis), field, ship);
     }
 
-    public ShipConfiguration findWaysToConfigureTheShip(Coord coord, Ship ship, Map<String, Ship> shipsMap)
+    private ShipConfiguration findWaysToConfigureTheShip(Coord coord, Ship ship, BitBoard others)
     {
         int lives = ship.getLives();
         int amountWays = 0;
@@ -335,7 +337,7 @@ public class Game
             for (int step = -1; step < 2; step += 2)
             {
                 negativeFree = positiveFree;
-                positiveFree = isValidWay(coord, variableAxis, step, ship, shipsMap);
+                positiveFree = isValidWay(coord, variableAxis, step, ship, others);
                 if (positiveFree == lives - 1 && !configured)
                 {
                     startRow = coord.row();
@@ -353,7 +355,7 @@ public class Game
         }
         return new ShipConfiguration(startRow, startCol, configAxis, configStep, amountWays);
     }
-    private int isValidWay(Coord coord, int variableAxis, int step, Ship ship, Map<String, Ship> shipsMap)
+    private int isValidWay(Coord coord, int variableAxis, int step, Ship ship, BitBoard others)
     {
         int lives = ship.getLives();
         int variableUnit = coord.axis(variableAxis);
@@ -364,20 +366,23 @@ public class Game
         for (int i = step; abs(i) < lives
                 && variableUnit + i < Coord.BOARD_SIZE && variableUnit + i >= 0; i += step)
         {
-            if (!isInCorrectPosition(Coord.of(variableUnit + i, fixedUnit, variableAxis), ship, shipsMap))
+            if (!isInCorrectPosition(Coord.of(variableUnit + i, fixedUnit, variableAxis), others))
                 return freeCages;
             freeCages++;
         }
         return freeCages;
     }
     /**
-     * Проверяет, находится ли хотя бы одна ячейка другого корабля в расстоянии одной клетки от координаты coord
-     * @param currentShip корабль, чью ячейку жизни проверяют
-     * @return true
+     * Свободна ли клетка coord для постановки: её «ход короля» (блок 3x3) не должен
+     * задевать ни одной чужой клетки. Занятость чужих кораблей считается один раз на
+     * клик ({@link #occupancyOfOtherShips}) и переиспользуется во всех проверках —
+     * сама проверка здесь за O(1) битовой операцией.
+     * @param occupancyOfOthers занятость всех кораблей, кроме ставящегося
+     * @return true, если клетку можно занять
      */
-    public boolean isInCorrectPosition(Coord coord, Ship currentShip, Map<String, Ship> shipsMap)
+    public boolean isInCorrectPosition(Coord coord, BitBoard occupancyOfOthers)
     {
-        return !BitBoard.blockAround(coord).intersects(occupancyOfOtherShips(currentShip, shipsMap));
+        return !BitBoard.blockAround(coord).intersects(occupancyOfOthers);
     }
 
     /**
