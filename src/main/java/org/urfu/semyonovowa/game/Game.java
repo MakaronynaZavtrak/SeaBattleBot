@@ -88,171 +88,189 @@ public class Game
 
     private boolean setBoatCage(Coord coord, TelegramField field, Ship ship)
     {
-        if (!isInCorrectPosition(coord, ship, field.getShipsMap()))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
             return false;
 
         treatSingleCage(coord, field, ship);
         return true;
     }
 
+    /**
+     * Первый клик по кораблю длиннее одной клетки: спрашивает у
+     * {@link #findWaysToConfigureTheShip} число способов уложить корабль через эту
+     * клетку. Единственный способ — раскладываем корабль целиком; ни одного — отказ;
+     * несколько — ставим одну клетку и ждём уточнения направления следующим кликом.
+     */
+    private boolean placeFirstCell(Coord coord, TelegramField field, Ship ship, BitBoard others)
+    {
+        ShipConfiguration configuration = findWaysToConfigureTheShip(coord, ship, others);
+        return switch (configuration.amountWays())
+        {
+            case 1 -> { configureTheShip(configuration, field, ship); yield true; }
+            case 0 -> false;
+            default -> { treatSingleCage(coord, field, ship); yield true; }
+        };
+    }
+
+    /**
+     * Ось клика относительно ориентации корабля.
+     * @param variableAxis индекс переменной оси (0 — строка, 1 — столбец)
+     * @param variableUnit координата клика вдоль переменной оси
+     * @param fixedUnit    координата клика вдоль фиксированной оси
+     */
+    private record PlacementAxis(int variableAxis, int variableUnit, int fixedUnit) {}
+
+    /**
+     * Определяет ось клика для многоклеточного корабля: по первому доклику задаёт
+     * ориентацию (и фиксированную координату) корабля, затем сверяет, что клик лежит
+     * на той же линии. Общая «преамбула» для линкора, крейсера и эсминца.
+     * @return ось клика, либо {@code null}, если клик несовместим (диагональ или
+     *         другая линия) — вызывающий трактует это как отказ.
+     */
+    private PlacementAxis resolveAxis(Coord coord, Ship ship)
+    {
+        Orientation orientation = (ship.getCoordinatesSet().size() == 1)
+                ? defineShipOrientation(coord, ship).orElse(null)
+                : ship.getOrientation();
+        if (orientation == null)
+            return null;
+
+        int variableAxis = orientation.axisIndex();
+        int fixedUnit = coord.axis(1 - variableAxis);
+        if (fixedUnit != ship.getFixedVal())
+            return null;
+
+        return new PlacementAxis(variableAxis, coord.axis(variableAxis), fixedUnit);
+    }
+
+    /** Диапазон корабля вдоль переменной оси: минимум и максимум занятых координат. */
+    private record Span(int min, int max) {}
+
+    /**
+     * Считает границы корабля вдоль переменной оси с учётом клика. Общий скан для
+     * линкора и крейсера (для эсминца вырождается в проверку единственной клетки).
+     * @return диапазон [min, max], либо {@code null}, если клик отстоит от уже
+     *         занятой клетки не ближе длины корабля (отказ).
+     */
+    private Span variableSpan(Ship ship, int variableAxis, int variableUnit)
+    {
+        int lives = ship.getLives();
+        int minVariable = variableUnit;
+        int maxVariable = variableUnit;
+        for (String cage : ship.getCoordinatesSet())
+        {
+            int current = Coord.parse(cage).axis(variableAxis);
+            if (abs(variableUnit - current) >= lives)
+                return null;
+            minVariable = min(minVariable, current);
+            maxVariable = max(maxVariable, current);
+        }
+        return new Span(minVariable, maxVariable);
+    }
+
     private boolean setEsminezCage(Coord coord, TelegramField field, Ship ship)
     {
-        if (!isInCorrectPosition(coord, ship, field.getShipsMap()))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
             return false;
         if (ship.getCoordinatesSet().isEmpty())
-        {
-            ShipConfiguration configuration = findWaysToConfigureTheShip(coord, ship, field.getShipsMap());
-            switch (configuration.getAmountWays())
-            {
-                case 1 -> {configureTheShip(configuration, field, ship); return true;}
-                case 0 -> {return false;}
-                default -> {treatSingleCage(coord, field, ship); return true;}
-            }
-        }
-        else
-        {
-            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship).orElse(null)
-                    : ship.getOrientation();
-            if (orientation == null)
-                return false;
-            int varUnitIdx = orientation.axisIndex();
+            return placeFirstCell(coord, field, ship, others);
 
-            int variableUnit = coord.axis(varUnitIdx);
-            int fixedUnit = coord.axis(1 - varUnitIdx);
+        PlacementAxis axis = resolveAxis(coord, ship);
+        if (axis == null)
+            return false;
+        if (variableSpan(ship, axis.variableAxis(), axis.variableUnit()) == null)
+            return false;
 
-            if (fixedUnit != ship.getFixedVal())
-                return false;
-
-            Coord firstCage = Coord.parse(ship.getCoordinatesSet().stream().findFirst().get());
-            int firstVariable = firstCage.axis(varUnitIdx);
-            if (abs(variableUnit - firstVariable) >= ship.getLives())
-                return false;
-            treatSingleCage(coord, field, ship);
-            return true;
-        }
+        treatSingleCage(coord, field, ship);
+        return true;
     }
 
     private boolean setCruiserCage(Coord coord, TelegramField field, Ship ship)
     {
-        if (!isInCorrectPosition(coord, ship, field.getShipsMap()))
+        BitBoard others = occupancyOfOtherShips(ship, field.getShipsMap());
+        if (!isInCorrectPosition(coord, others))
+            return false;
+        if (ship.getCoordinatesSet().isEmpty())
+            return placeFirstCell(coord, field, ship, others);
+
+        PlacementAxis axis = resolveAxis(coord, ship);
+        if (axis == null)
+            return false;
+        Span span = variableSpan(ship, axis.variableAxis(), axis.variableUnit());
+        if (span == null)
             return false;
 
-        if (ship.getCoordinatesSet().isEmpty())
+        int variableAxis = axis.variableAxis();
+        int fixedUnit = axis.fixedUnit();
+        int minVariable = span.min();
+        int maxVariable = span.max();
+        int lives = ship.getLives();
+
+        if (maxVariable - minVariable == lives - 1)
         {
-            ShipConfiguration configuration = findWaysToConfigureTheShip(coord, ship, field.getShipsMap());
-            switch (configuration.getAmountWays())
-            {
-                case 1 -> {configureTheShip(configuration, field, ship); return true;}
-                case 0 -> {return false;}
-                default -> {treatSingleCage(coord, field, ship); return true;}
-            }
-        }
-        else
-        {
-            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship).orElse(null)
-                    : ship.getOrientation();
-            if (orientation == null)
-                return false;
-            int varUnitIdx = orientation.axisIndex();
-
-            int variableUnit = coord.axis(varUnitIdx);
-            int fixedUnit = coord.axis(1 - varUnitIdx);
-
-            if (fixedUnit != ship.getFixedVal())
-                return false;
-
-            int minVariable = variableUnit;
-            int maxVariable = variableUnit;
-
-            for (String cage: ship.getCoordinatesSet())
-            {
-                int currentVariable = Coord.parse(cage).axis(varUnitIdx);
-                if (abs(variableUnit - currentVariable) >= ship.getLives())
-                    return false;
-                minVariable = min(minVariable, currentVariable);
-                maxVariable = max(maxVariable, currentVariable);
-            }
-
-            if (maxVariable - minVariable == ship.getLives() - 1)
-            {
-                for (int i = minVariable; i < ship.getLives() + minVariable; i++)
-                    treatSingleCage(Coord.of(i, fixedUnit, varUnitIdx), field, ship);
-                return true;
-            }
-
-            Coord beforeMin = Coord.of(minVariable - 1, fixedUnit, varUnitIdx);
-            Coord afterMax = Coord.of(maxVariable + 1, fixedUnit, varUnitIdx);
-
-            if ((minVariable == 0 || !isInCorrectPosition(beforeMin, ship, field.getShipsMap()))
-                    && isInCorrectPosition(afterMax, ship, field.getShipsMap())
-                    && afterMax.isOnBoard())
-            {
-                fillShipCages(minVariable, fixedUnit, varUnitIdx, 1, ship, field);
-                return true;
-            }
-            else if ((maxVariable == Coord.BOARD_SIZE - 1 || !isInCorrectPosition(afterMax, ship, field.getShipsMap()))
-                    && isInCorrectPosition(beforeMin, ship, field.getShipsMap())
-                    && beforeMin.isOnBoard())
-            {
-                fillShipCages(maxVariable, fixedUnit, varUnitIdx, -1, ship, field);
-                return true;
-            }
-
-            for (int i = minVariable; i < ship.getLives() + minVariable; i++)
-            {
-                if (!isInCorrectPosition(Coord.of(i, fixedUnit, varUnitIdx), ship, field.getShipsMap()))
-                    return false;
-            }
-            treatSingleCage(coord, field, ship);
+            fillShipCages(minVariable, fixedUnit, variableAxis, 1, ship, field);
             return true;
         }
+
+        Coord beforeMin = Coord.of(minVariable - 1, fixedUnit, variableAxis);
+        Coord afterMax = Coord.of(maxVariable + 1, fixedUnit, variableAxis);
+
+        if ((minVariable == 0 || !isInCorrectPosition(beforeMin, others))
+                && isInCorrectPosition(afterMax, others)
+                && afterMax.isOnBoard())
+        {
+            fillShipCages(minVariable, fixedUnit, variableAxis, 1, ship, field);
+            return true;
+        }
+        else if ((maxVariable == Coord.BOARD_SIZE - 1 || !isInCorrectPosition(afterMax, others))
+                && isInCorrectPosition(beforeMin, others)
+                && beforeMin.isOnBoard())
+        {
+            fillShipCages(maxVariable, fixedUnit, variableAxis, -1, ship, field);
+            return true;
+        }
+
+        for (int i = minVariable; i < lives + minVariable; i++)
+        {
+            if (!isInCorrectPosition(Coord.of(i, fixedUnit, variableAxis), others))
+                return false;
+        }
+        treatSingleCage(coord, field, ship);
+        return true;
     }
 
     private boolean setLinCoreCage(Coord coord, TelegramField field, Ship ship)
     {
         if (!ship.getCoordinatesSet().isEmpty())
         {
-            Orientation orientation = (ship.getCoordinatesSet().size() == 1)
-                    ? defineShipOrientation(coord, ship).orElse(null)
-                    : ship.getOrientation();
-            if (orientation == null)
+            PlacementAxis axis = resolveAxis(coord, ship);
+            if (axis == null)
                 return false;
-            int varUnitIdx = orientation.axisIndex();
-
-            int variableUnit = coord.axis(varUnitIdx);
-            int fixedUnit = coord.axis(1 - varUnitIdx);
-
-            if (fixedUnit != ship.getFixedVal())
+            Span span = variableSpan(ship, axis.variableAxis(), axis.variableUnit());
+            if (span == null)
                 return false;
 
-            int minVariable = variableUnit;
-            int maxVariable = variableUnit;
-
-            for (String cage : ship.getCoordinatesSet())
-            {
-                int currentVariable = Coord.parse(cage).axis(varUnitIdx);
-                if (abs(variableUnit - currentVariable) >= ship.getLives())
-                    return false;
-                minVariable = min(minVariable, currentVariable);
-                maxVariable = max(maxVariable, currentVariable);
-            }
+            int variableAxis = axis.variableAxis();
+            int fixedUnit = axis.fixedUnit();
+            int minVariable = span.min();
+            int maxVariable = span.max();
 
             if (minVariable == 0)
             {
-                fillShipCages(minVariable, fixedUnit, varUnitIdx, 1, ship, field);
+                fillShipCages(minVariable, fixedUnit, variableAxis, 1, ship, field);
                 return true;
             }
             else if (maxVariable == Coord.BOARD_SIZE - 1)
             {
-                fillShipCages(maxVariable, fixedUnit, varUnitIdx, -1, ship, field);
+                fillShipCages(maxVariable, fixedUnit, variableAxis, -1, ship, field);
                 return true;
             }
 
             if (maxVariable - minVariable == ship.getLives() - 1)
             {
-                fillShipCages(minVariable, fixedUnit, varUnitIdx, 1, ship, field);
+                fillShipCages(minVariable, fixedUnit, variableAxis, 1, ship, field);
                 return true;
             }
         }
@@ -281,11 +299,13 @@ public class Game
 
     private void configureTheShip(ShipConfiguration configuration, TelegramField field, Ship ship)
     {
-        Coord start = new Coord(configuration.getY(), configuration.getX());
-        int variableUnit = start.axis(configuration.getVarUnitIdx());
-        int fixedUnit = start.axis(1 - configuration.getVarUnitIdx());
-        for (int i = 0; abs(i) < ship.getLives(); i += configuration.getStep())
-            treatSingleCage(Coord.of(variableUnit + i, fixedUnit, configuration.getVarUnitIdx()), field, ship);
+        Coord start = new Coord(configuration.startRow(), configuration.startCol());
+        int variableAxis = configuration.variableAxis();
+        int variableUnit = start.axis(variableAxis);
+        int fixedUnit = start.axis(1 - variableAxis);
+        int lives = ship.getLives();
+        for (int i = 0; abs(i) < lives; i += configuration.step())
+            treatSingleCage(Coord.of(variableUnit + i, fixedUnit, variableAxis), field, ship);
     }
 
     private void treatSingleCage(Coord coord, TelegramField field, Ship ship)
@@ -296,66 +316,73 @@ public class Game
         field.getShipsMap().put(key, ship);
     }
 
-    private void fillShipCages(int minVariableUnit, int fixed, int varUnitIdx, int step, Ship ship, TelegramField field)
+    private void fillShipCages(int minVariableUnit, int fixed, int variableAxis, int step, Ship ship, TelegramField field)
     {
-        for (int i = 0; abs(i) < ship.getLives(); i += step)
-            treatSingleCage(Coord.of(minVariableUnit + i, fixed, varUnitIdx), field, ship);
+        int lives = ship.getLives();
+        for (int i = 0; abs(i) < lives; i += step)
+            treatSingleCage(Coord.of(minVariableUnit + i, fixed, variableAxis), field, ship);
     }
 
-    private ShipConfiguration findWaysToConfigureTheShip(Coord coord, Ship ship, Map<String, Ship> shipsMap)
+    private ShipConfiguration findWaysToConfigureTheShip(Coord coord, Ship ship, BitBoard others)
     {
+        int lives = ship.getLives();
         int amountWays = 0;
-        ShipConfiguration configuration = new ShipConfiguration();
+        boolean configured = false;
+        int startRow = 0, startCol = 0, configAxis = 0, configStep = 0;
 
-        for (int varUnitIdx = 0; varUnitIdx < 2; varUnitIdx++)
+        for (int variableAxis = 0; variableAxis < 2; variableAxis++)
         {
-            int positiveDif = 0;
-            int negativeDif = 0;
+            int positiveFree = 0;
+            int negativeFree = 0;
             for (int step = -1; step < 2; step += 2)
             {
-                negativeDif = positiveDif;
-                positiveDif = isValidWay(coord, varUnitIdx, step, ship, shipsMap);
-                if (positiveDif == ship.getLives() - 1)
-                    if (!configuration.canBeConfigured())
-                        configuration.initializeConfiguration(coord.row(), coord.col(), varUnitIdx, step);
+                negativeFree = positiveFree;
+                positiveFree = isValidWay(coord, variableAxis, step, ship, others);
+                if (positiveFree == lives - 1 && !configured)
+                {
+                    startRow = coord.row();
+                    startCol = coord.col();
+                    configAxis = variableAxis;
+                    configStep = step;
+                    configured = true;
+                }
             }
-            if (positiveDif + negativeDif + 1 >= ship.getLives())
-                amountWays += min(positiveDif, negativeDif) + 1;
+            if (positiveFree + negativeFree + 1 >= lives)
+                amountWays += min(positiveFree, negativeFree) + 1;
 
             if (amountWays > 1)
-            {
-                configuration.setAmountWays(amountWays);
-                return configuration;
-            }
-
+                return new ShipConfiguration(startRow, startCol, configAxis, configStep, amountWays);
         }
-        configuration.setAmountWays(amountWays);
-        return configuration;
+        return new ShipConfiguration(startRow, startCol, configAxis, configStep, amountWays);
     }
-    private int isValidWay(Coord coord, int varUnitIdx, int step, Ship ship, Map<String, Ship> shipsMap)
+    private int isValidWay(Coord coord, int variableAxis, int step, Ship ship, BitBoard others)
     {
-        int variableUnit = coord.axis(varUnitIdx);
-        int fixedUnit = coord.axis(1 - varUnitIdx);
+        int lives = ship.getLives();
+        int variableUnit = coord.axis(variableAxis);
+        int fixedUnit = coord.axis(1 - variableAxis);
 
         int freeCages = 0;
 
-        for (int i = step; abs(i) < ship.getLives()
+        for (int i = step; abs(i) < lives
                 && variableUnit + i < Coord.BOARD_SIZE && variableUnit + i >= 0; i += step)
         {
-            if (!isInCorrectPosition(Coord.of(variableUnit + i, fixedUnit, varUnitIdx), ship, shipsMap))
+            if (!isInCorrectPosition(Coord.of(variableUnit + i, fixedUnit, variableAxis), others))
                 return freeCages;
             freeCages++;
         }
         return freeCages;
     }
     /**
-     * Проверяет, находится ли хотя бы одна ячейка другого корабля в расстоянии одной клетки от координаты coord
-     * @param currentShip корабль, чью ячейку жизни проверяют
-     * @return true
+     * Свободна ли клетка coord для постановки: её «ход короля» (блок 3x3) не должен
+     * задевать ни одной чужой клетки. Занятость чужих кораблей считается один раз на
+     * клик ({@link #occupancyOfOtherShips}) и переиспользуется во всех проверках —
+     * сама проверка здесь за O(1) битовой операцией.
+     * @param occupancyOfOthers занятость всех кораблей, кроме ставящегося
+     * @return true, если клетку можно занять
      */
-    public boolean isInCorrectPosition(Coord coord, Ship currentShip, Map<String, Ship> shipsMap)
+    public boolean isInCorrectPosition(Coord coord, BitBoard occupancyOfOthers)
     {
-        return !BitBoard.blockAround(coord).intersects(occupancyOfOtherShips(currentShip, shipsMap));
+        return !BitBoard.blockAround(coord).intersects(occupancyOfOthers);
     }
 
     /**

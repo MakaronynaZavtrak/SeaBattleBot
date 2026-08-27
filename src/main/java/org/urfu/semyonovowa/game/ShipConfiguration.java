@@ -1,32 +1,16 @@
 package org.urfu.semyonovowa.game;
 
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
-
-@Getter
-public class ShipConfiguration
-{
-    private int y;
-    private int x;
-    private int varUnitIdx;
-    private int step;
-    @Setter
-    private int amountWays;
-    @Getter(AccessLevel.NONE)
-    private boolean configFlag;
-    public ShipConfiguration()
-    {
-        this.configFlag = false;
-        this.amountWays = 0;
-    }
-    public void initializeConfiguration(int y, int x, int varUnitIdx, int step)
-    {
-        this.y = y;
-        this.x = x;
-        this.varUnitIdx = varUnitIdx;
-        this.step = step;
-        this.configFlag = true;
-    }
-    public boolean canBeConfigured(){return this.configFlag;}
-}
+/**
+ * Найденная раскладка корабля вокруг кликнутой клетки — результат
+ * {@link Game#findWaysToConfigureTheShip}. Неизменяемое значение: собирается один
+ * раз при обходе и только читается в {@link Game#configureTheShip}.
+ *
+ * @param startRow     строка стартовой (кликнутой) клетки
+ * @param startCol     столбец стартовой (кликнутой) клетки
+ * @param variableAxis индекс переменной оси раскладки (0 — строка, 1 — столбец)
+ * @param step         направление раскладки вдоль оси (+1 или -1)
+ * @param amountWays   сколько всего способов уложить корабль через эту клетку:
+ *                     0 — никак (отказ), 1 — единственный (раскладываем целиком),
+ *                     &gt;1 — неоднозначно (ставим одну клетку и ждём уточнения)
+ */
+public record ShipConfiguration(int startRow, int startCol, int variableAxis, int step, int amountWays) {}
