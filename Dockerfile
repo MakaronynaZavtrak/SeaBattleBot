@@ -1,5 +1,9 @@
 # ===== Стадия сборки =====
-FROM maven:3.9-eclipse-temurin-21 AS build
+# jar — платформонезависимый байткод, поэтому стадию сборки пинуем к архе раннера
+# ($BUILDPLATFORM): Maven гоняется нативно для любой целевой платформы, без
+# эмуляции QEMU. Мультиархится только рантайм-стадия ниже (тот же jar копируется
+# в arm64/amd64 рантаймы). Требует BuildKit — включён по умолчанию в совр. Docker и buildx.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 
 # Сначала только pom — слой с зависимостями кэшируется, пока pom не меняется
