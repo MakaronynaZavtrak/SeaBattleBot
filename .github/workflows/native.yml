@@ -1,0 +1,39 @@
+name: Native build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native image (GraalVM 21)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up GraalVM (JDK 21)
+        uses: actions/setup-java@v5
+        with:
+          distribution: graalvm
+          java-version: '21'
+          cache: maven
+
+      # Собираем нативный бинарь. Профиль `native` (из spring-boot-starter-parent)
+      # прогоняет process-aot и native-image в фазе package. Тесты пропускаем:
+      # интеграционные на Testcontainers в native-режиме тут не гоняем.
+      - name: Build native image
+        run: mvn -B -ntp -Pnative -DskipTests package
+
+      - name: Upload native binary
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sea-battle-bot-native
+          path: target/sea-battle-bot
+          if-no-files-found: warn
