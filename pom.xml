@@ -129,6 +129,13 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- GraalVM Native Build Tools. Версия управляется spring-boot-starter-parent;
+                 он же предоставляет профиль `native`, который привязывает process-aot
+                 и сборку нативного образа. Сборка: mvn -Pnative -DskipTests package -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+            </plugin>
         </plugins>
     </build>
 </project>
